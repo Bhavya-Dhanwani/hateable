@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: watermelon
+  labels:
+    app.kubernetes.io/name: watermelon
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - pathType: Prefix
+        path: "/api/auth"
+        backend:
+          service:
+            name: auth-service
+            port: 
+              number: 80
+  
+  - http:
+      paths:
+      - pathType: Prefix
+        path: "/api/projects"
+        backend:
+          service:
+            name: project-service
+            port: 
+              number: 80
