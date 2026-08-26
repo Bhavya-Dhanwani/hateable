@@ -1,19 +1,19 @@
 // Importing modules
 import { Request, Response } from "express";
 import { AuthenticatedRequest, SignupRequest, LoginRequest, SessionRequest, GoogleLoginRequest, ForgotPasswordRequest, ResetPasswordRequest } from "./auth.types.js";
-import env from "../../../shared/config/env.config.js";
-import { OTP_EXPIRY_TIME, RESET_PASSWORD_TOKEN_EXPIRY_TIME } from "../../../shared/constants/tokens.constants.js";
-import UserDao from "../../../shared/dao/user.dao.js";
-import SessionDao from "../../../shared/dao/session.dao.js";
-import TokenDao from "../../../shared/dao/token.dao.js";
-import NotFound from "../../../shared/errors/NotFound.error.js";
-import Unauthorized from "../../../shared/errors/Unauthorized.error.js";
-import Created from "../../../shared/responses/Created.response.js";
-import Ok from "../../../shared/responses/Ok.response.js";
-import createSession from "../../../shared/utils/createSession.util.js";
-import { getGoogleAuthorizationUrl, getGoogleUserFromCode, verifyGoogleToken } from "../../../shared/utils/googleAuth.util.js";
-import sendMail from "../../../shared/utils/sendMail.util.js";
-import { generateOTPToken, generateResetPasswordToken } from "../../../shared/utils/token.util.js";
+import env from "../../shared/config/env.config.js";
+import { OTP_EXPIRY_TIME, RESET_PASSWORD_TOKEN_EXPIRY_TIME } from "../../shared/constants/tokens.constants.js";
+import UserDao from "../../shared/dao/user.dao.js";
+import SessionDao from "../../shared/dao/session.dao.js";
+import TokenDao from "../../shared/dao/token.dao.js";
+import NotFound from "../../shared/errors/NotFound.error.js";
+import Unauthorized from "../../shared/errors/Unauthorized.error.js";
+import Created from "../../shared/responses/Created.response.js";
+import Ok from "../../shared/responses/Ok.response.js";
+import createSession from "../../shared/utils/createSession.util.js";
+import { getGoogleAuthorizationUrl, getGoogleUserFromCode, verifyGoogleToken } from "../../shared/utils/googleAuth.util.js";
+import sendMail from "../../shared/utils/sendMail.util.js";
+import { generateOTPToken, generateResetPasswordToken } from "../../shared/utils/token.util.js";
 
 // class to handle public authentication operations
 class AuthController {

@@ -5,8 +5,8 @@ import logger from "./src/shared/config/logger.config.js";
 async function startServer() {
 	const app = createApp();
 
-	app.listen(env.PORT || 5001, () => {
-		logger.info(`Server is running on port ${env.PORT || 5001}`);
+	app.listen(env.PORT, () => {
+		logger.info(`Server is running on port ${env.PORT}`);
 	});
 }
 

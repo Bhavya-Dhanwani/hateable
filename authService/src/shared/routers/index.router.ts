@@ -1,7 +1,7 @@
 // Importing modules
 import express from "express";
 import healthRouter from "./health.router.js";
-import authRouter from "../../modules/public/auth/auth.router.js";
+import authRouter from "../../modules/auth/auth.router.js";
 
 // making the router
 const router = express.Router();

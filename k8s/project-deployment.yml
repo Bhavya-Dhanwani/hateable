@@ -5,7 +5,7 @@ metadata:
   labels:
     name: project-deployment
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app:  project
@@ -14,10 +14,11 @@ spec:
       labels:
         app:  project
     spec:
+      serviceAccount:  resource-manager
       containers:
       - image:  project-image
         name:  project-main
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         resources:
           requests:
             cpu: "120m"
@@ -27,13 +28,13 @@ spec:
             memory: "250M"
         livenessProbe:
           httpGet:
-            path: /_status/healthz
+            path: /api/health
             port: 3000
           initialDelaySeconds: 90
           timeoutSeconds: 10
         readinessProbe:
           httpGet:
-            path: /_status/healthz
+            path: /api/health
             port: 3000
           initialDelaySeconds: 30
           timeoutSeconds: 10
@@ -48,6 +49,8 @@ spec:
             secretKeyRef:
               name:  database
               key:  PROJECT_DB
+        - name:  PORT
+          value:  "3000"
         ports:
         - containerPort:  3000
           name:  http

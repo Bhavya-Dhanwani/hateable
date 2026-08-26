@@ -2,8 +2,8 @@
 import express from "express";
 import AuthController from "./auth.controller.js";
 import { signupValidators, loginValidators, forgotPasswordValidators, resetPasswordValidators, googleLoginValidators } from "./auth.validator.js";
-import authMiddleware from "../../../shared/middlewares/auth.middleware.js";
-import refreshMiddleware from "../../../shared/middlewares/refresh.middleware.js";
+import authMiddleware from "../../shared/middlewares/auth.middleware.js";
+import refreshMiddleware from "../../shared/middlewares/refresh.middleware.js";
 
 // making the router
 const router = express.Router();

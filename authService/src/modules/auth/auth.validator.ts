@@ -1,6 +1,6 @@
 // Importing modules
 import { body } from "express-validator";
-import validateErrors from "../../../shared/utils/validateErrors.util.js";
+import validateErrors from "../../shared/utils/validateErrors.util.js";
 
 const signupValidators = [
 

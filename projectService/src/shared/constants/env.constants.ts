@@ -1,5 +1,5 @@
 const envConstants = {
-    PORT: 5001,
+    PORT: 3000,
     NODE_ENV: 'development',
     MONGO_URI: 'mongodb://localhost:27017/projectService',
     CORS_ORIGIN: '*',
