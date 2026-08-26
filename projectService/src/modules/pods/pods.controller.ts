@@ -1,20 +1,25 @@
 import { Response } from "express";
 import ApiResponse from "../../shared/utils/ApiResponse.util.js";
-import createPod from "../../shared/services/k8s.service.js";
+import { createPod, createService } from "../../shared/services/k8s.service.js";
 import { CreatePodRequest } from "./pods.type.js";
+import { v4 as uuid } from "uuid";
 
 class PodsController {
 
     createPod = async (req: CreatePodRequest, res: Response) => {
 
-        // const { podName, projectId } = req.query;
+        const uniqueId = uuid();
 
-        const podName = "pod1";
-        const projectId = "project1";
+        const podName = `nextjs-pod-${uniqueId}`;
+        const serviceName = `nextjs-service-${uniqueId}`;
+        const projectId = "projects"
         
         await createPod(podName, projectId);
+        await createService(serviceName, podName);
         
-        return ApiResponse(res, 201, `Pod ${podName} created successfully in namespace default.`, null);
+        return ApiResponse(res, 201, `Pod ${podName} created successfully in namespace default.`, {
+            previewURL: `http://${uniqueId}.preview.localhost`,
+        });
 
     }
     

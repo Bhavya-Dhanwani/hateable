@@ -1,7 +1,7 @@
 import * as k8s from "@kubernetes/client-node";
 import logger from "../config/logger.config.js";
 
-async function createPod(podName: string, _projectId: string) {
+export async function createPod(podName: string, _projectId: string) {
     const kc = new k8s.KubeConfig();
     kc.loadFromCluster();
 
@@ -18,7 +18,7 @@ async function createPod(podName: string, _projectId: string) {
             containers: [
                 {
                     name: "nextjs-container",
-                    image: "nextjs-image:v2",
+                    image: "nextjs-image",
                     imagePullPolicy: "IfNotPresent",
                     ports: [{ containerPort: 3000 }],
                     resources: {
@@ -39,5 +39,33 @@ async function createPod(podName: string, _projectId: string) {
     logger.info(`Response: ${JSON.stringify(response)}`);
 }
 
-export default createPod;
+export async function createService(serviceName: string, podName: string) {
 
+    const kc = new k8s.KubeConfig();
+    kc.loadFromCluster();
+    
+    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+
+    const serviceManifest: k8s.V1Service = {
+        apiVersion: "v1",
+        kind: "Service",
+        metadata: {
+            name: serviceName,
+            labels: { app: podName }
+        },
+        spec: {
+            selector: { app: podName },
+            ports: [{ protocol: "TCP", port: 80, targetPort: 3000 }],
+            type: "LoadBalancer"
+        }
+    };
+
+    const response = await k8sApi.createNamespacedService({
+        namespace: "default",
+        body: serviceManifest
+    });
+
+    logger.info(`Service ${serviceName} created successfully in namespace default.`);
+    logger.info(`Response: ${JSON.stringify(response)}`);
+
+}
