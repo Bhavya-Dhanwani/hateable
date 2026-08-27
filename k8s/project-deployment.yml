@@ -49,6 +49,8 @@ spec:
             secretKeyRef:
               name:  database
               key:  PROJECT_DB
+        - name:  REDIS_URL
+          value:  "redis://redis-service:6379"
         - name:  PORT
           value:  "3000"
         ports:

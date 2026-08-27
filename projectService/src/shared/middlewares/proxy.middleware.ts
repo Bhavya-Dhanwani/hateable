@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { createProxyMiddleware } from "http-proxy-middleware";
 
 const proxyMap: { [key: string]: Function } = {};
+const proxyAgentMap: { [key: string]: Function } = {};
 
 function handleProxyAgent(uniqueId: string) {
 
@@ -25,11 +26,33 @@ function handleProxyAgent(uniqueId: string) {
 
 }
 
+function handleProxyAgentWorkspace(uniqueId: string) {
+
+    if (proxyAgentMap[uniqueId]) {
+        return proxyAgentMap[uniqueId];
+    }
+
+    const targetUrl = `http://nextjs-service-${uniqueId}:8000`;
+
+    const proxyMiddleware = createProxyMiddleware({
+        target: targetUrl,
+        changeOrigin: true,
+        pathRewrite: {
+            "^/": "/",
+        },
+    });
+
+    proxyAgentMap[uniqueId] = proxyMiddleware;
+
+    return proxyMiddleware;
+
+}
+
 function handleProxy(req: Request, res: Response, next: NextFunction) {
 
     const host = req.headers.host || "";
 
-    if(!host.includes("preview")) {
+    if(!host.includes("preview") && !host.includes("workspace")) {
         return next();
     }
 
@@ -41,8 +64,11 @@ function handleProxy(req: Request, res: Response, next: NextFunction) {
         return res.status(400).json({ error: "Invalid preview URL." });
     }
 
-    return handleProxyAgent(uniqueId)(req, res, next);
-
+    if (host.includes("preview")) {
+        return handleProxyAgent(uniqueId)(req, res, next);
+    }else if (host.includes("workspace")) {
+        return handleProxyAgentWorkspace(uniqueId)(req, res, next);
+    }
 }
 
 export default handleProxy;

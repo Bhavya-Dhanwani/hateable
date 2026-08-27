@@ -45,11 +45,25 @@ build:
         after:
           - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% nextjs-image:latest && docker tag %SKAFFOLD_IMAGE% nextjs-image:v2"]
 
+    - image: express-image
+      context: express-file-server
+      docker:
+        dockerfile: dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.ts'
+            dest: /workspace
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% express-image:latest"]
+
 # ── Manifests ──────────────────────────────────────
 manifests:
   rawYaml:
     - k8s/secrets.yml
     - k8s/rbac.yml
+    - k8s/redis-deployment.yml
+    - k8s/redis-service.yml
     - k8s/auth-deployment.yml
     - k8s/auth-service.yml
     - k8s/project-deployment.yml
