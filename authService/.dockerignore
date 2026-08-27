@@ -1,2 +1,7 @@
-node_modules/
+node_modules
+dist
+.git
+*.log
 .env
+build
+.DS_Store

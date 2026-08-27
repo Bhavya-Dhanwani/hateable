@@ -1,0 +1,68 @@
+apiVersion: skaffold/v4beta13
+kind: Config
+metadata:
+  name: hateable-app
+
+# ── Build ──────────────────────────────────────────
+build:
+  local:
+    push: false        # build locally and don't push to any registry
+  artifacts:
+
+    - image: auth-image
+      context: authService
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'server.ts'
+            dest: /app
+          - src: 'src/**/*.ts'
+            dest: /app
+
+    - image: project-image
+      context: projectService
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'server.ts'
+            dest: /app
+          - src: 'src/**/*.ts'
+            dest: /app
+
+    - image: nextjs-image
+      context: nextjsboilerplate
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'app/**/*.{js,jsx,ts,tsx,css}'
+            dest: /app
+          - src: 'public/**/*'
+            dest: /app
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% nextjs-image:latest && docker tag %SKAFFOLD_IMAGE% nextjs-image:v2"]
+
+# ── Manifests ──────────────────────────────────────
+manifests:
+  rawYaml:
+    - k8s/secrets.yml
+    - k8s/rbac.yml
+    - k8s/auth-deployment.yml
+    - k8s/auth-service.yml
+    - k8s/project-deployment.yml
+    - k8s/project-service.yml
+    - k8s/ingress.yml
+
+# ── Port Forwarding ────────────────────────────────
+portForward:
+  - resourceType: service
+    resourceName: auth-service
+    port: 80
+    localPort: 4000
+  - resourceType: service
+    resourceName: project-service
+    port: 80
+    localPort: 3000

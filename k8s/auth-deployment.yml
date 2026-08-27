@@ -48,7 +48,7 @@ spec:
             secretKeyRef:
               name:  auth
               key:  REFRESH_TOKEN_SECRET
-        - name:  MONGODB_URI
+        - name:  MONGO_URI
           valueFrom:
             secretKeyRef:
               name:  database
