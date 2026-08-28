@@ -57,6 +57,18 @@ build:
         after:
           - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% express-image:latest"]
 
+    - image: sync-image
+      context: syncService
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.ts'
+            dest: /workspace
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% sync-image:latest"]
+
 # ── Manifests ──────────────────────────────────────
 manifests:
   rawYaml:

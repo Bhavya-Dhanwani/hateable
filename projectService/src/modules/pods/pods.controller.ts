@@ -13,7 +13,7 @@ class PodsController {
 
         const podName = `nextjs-pod-${uniqueId}`;
         const serviceName = `nextjs-service-${uniqueId}`;
-        const projectId = "projects"
+        const projectId = uniqueId;
         
         await createPod(podName, projectId);
         await createService(serviceName, podName);

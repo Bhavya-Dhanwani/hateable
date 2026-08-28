@@ -6,7 +6,7 @@ kc.loadFromCluster();
 
 const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
 
-export async function createPod(podName: string, _projectId: string) {
+export async function createPod(podName: string, projectId: string) {
 
     const podManifest: k8s.V1Pod = {
         apiVersion: "v1",
@@ -68,6 +68,57 @@ export async function createPod(podName: string, _projectId: string) {
                             mountPath: "/app"
                         }
                     ]
+                 },
+                 {
+                    name: "sync-container",
+                    image: "sync-image",
+                    imagePullPolicy: "IfNotPresent",
+                    resources: {
+                        requests: { memory: "256Mi", cpu: "100m" },
+                        limits: { memory: "512Mi", cpu: "250m" }
+                    },
+                    volumeMounts: [
+                        {
+                            name: "app-volume",
+                            mountPath: "/app"
+                        }
+                    ],
+                    env: [
+                        {
+                            name: "PROJECT_ID",
+                            value: projectId
+                        },
+                        {
+                            name: "AWS_ACCESS_KEY_ID",
+                            valueFrom: {
+                                secretKeyRef: {
+                                    name: "aws",
+                                    key: "AWS_ACCESS_KEY_ID"
+                                }
+                            }
+                        },
+                        {
+                            name: "AWS_SECRET_ACCESS_KEY",
+                            valueFrom: {
+                                secretKeyRef: {
+                                    name: "aws",
+                                    key: "AWS_SECRET_ACCESS_KEY"
+                                }
+                            }
+                        },
+                        {
+                            name: "S3_BUCKET_NAME",
+                            value: "hateable-bucket"
+                        },
+                        {
+                            name: "AWS_REGION",
+                            value: "us-east-1"
+                        },
+                        {
+                            name: "S3_ENDPOINT",
+                            value: "http://host.docker.internal:9000"
+                        }
+                    ]
                  }
             ]
         }, 
@@ -97,7 +148,7 @@ export async function createService(serviceName: string, podName: string) {
                 { protocol: "TCP", port: 80, targetPort: 3000, name: "preview-port" },
                 { protocol: "TCP", port: 8000, targetPort: 8080, name: "file-server-port" }
             ],
-            type: "LoadBalancer"
+            type: "ClusterIP"
         }
     };
 
