@@ -1,5 +1,6 @@
 import { redis, redisSubscriber } from "./redis.service.js"
 import { deletePod, deleteService } from "./k8s.service.js"
+import Project from "../models/project.model.js"
 
 /**
  * Idle preview reaper.
@@ -87,6 +88,7 @@ async function reap(uniqueId: string) {
     try {
         await deleteService(`nextjs-service-${uniqueId}`)
         await deletePod(`nextjs-pod-${uniqueId}`)
+        await Project.findByIdAndUpdate(uniqueId, { status: "stopped" })
         await redis.publish(REAPED_CHANNEL, uniqueId)
     } catch (error) {
         console.error(`[idle-reaper] failed to tear down ${uniqueId}:`, error)

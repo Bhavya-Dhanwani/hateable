@@ -31,6 +31,17 @@ build:
           - src: 'src/**/*.ts'
             dest: /app
 
+    - image: ai-image
+      context: aiService
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'server.ts'
+            dest: /app
+          - src: 'src/**/*.ts'
+            dest: /app
+
     - image: nextjs-image
       context: nextjsboilerplate
       docker:
@@ -80,6 +91,8 @@ manifests:
     - k8s/auth-service.yml
     - k8s/project-deployment.yml
     - k8s/project-service.yml
+    - k8s/ai-deployment.yml
+    - k8s/ai-service.yml
     - k8s/ingress.yml
 
 # ── Port Forwarding ────────────────────────────────
@@ -92,3 +105,7 @@ portForward:
     resourceName: project-service
     port: 80
     localPort: 3000
+  - resourceType: service
+    resourceName: ai-service
+    port: 80
+    localPort: 5000

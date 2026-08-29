@@ -49,3 +49,13 @@ spec:
             name: project-service
             port: 
               number: 80
+  
+  - http:
+      paths:
+      - pathType: Prefix
+        path: "/api/ai"
+        backend:
+          service:
+            name: ai-service
+            port: 
+              number: 80

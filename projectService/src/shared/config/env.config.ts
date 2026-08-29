@@ -12,6 +12,8 @@ const envSchema = z.object({
     NODE_ENV: z.enum(["development", "production", "test"]).default(envConstants.NODE_ENV),
     MONGO_URI: z.string().default(envConstants.MONGO_URI),
     CORS_ORIGIN: z.string().default(envConstants.CORS_ORIGIN),
+    BROKER_URL: z.string().default(envConstants.BROKER_URL),
+    ACCESS_TOKEN_SECRET: z.string().default(envConstants.ACCESS_TOKEN_SECRET),
 });
 
 // parsing and validating environment variables

@@ -1,8 +1,40 @@
 import type { Request, Response, NextFunction } from "express";
 import { createProxyMiddleware } from "http-proxy-middleware";
+import { recordActivity, onPreviewReaped } from "../services/activity.service.js";
 
 const proxyMap: { [key: string]: Function } = {};
 const proxyAgentMap: { [key: string]: Function } = {};
+
+// Clean up stale proxy instances when a preview is reaped
+onPreviewReaped((uniqueId) => {
+    delete proxyMap[uniqueId];
+    delete proxyAgentMap[uniqueId];
+});
+
+const STARTING_HTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Workspace Starting Up</title>
+  <meta http-equiv="refresh" content="5">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; padding: 50px; background-color: #f7f9fa; }
+    .card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); max-width: 500px; margin: 0 auto; border: 1px solid #e1e8ed; }
+    h1 { color: #1a1a1a; font-size: 24px; margin-bottom: 10px; }
+    p { color: #657786; font-size: 16px; line-height: 1.5; }
+    .spinner { border: 3px solid #e1e8ed; width: 40px; height: 40px; border-radius: 50%; border-left-color: #1da1f2; animation: spin 1s linear infinite; margin: 25px auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <h1>Project workspace is starting up</h1>
+    <p>We are spinning up the preview environment for this project. This page will refresh automatically in 5 seconds...</p>
+  </div>
+</body>
+</html>
+`;
 
 function handleProxyAgent(uniqueId: string) {
 
@@ -18,6 +50,14 @@ function handleProxyAgent(uniqueId: string) {
         pathRewrite: {
             "^/": "/",
         },
+        on: {
+            error: (err, req, res: any) => {
+                if (res.writeHead && !res.headersSent) {
+                    res.writeHead(503, { "Content-Type": "text/html" });
+                    res.end(STARTING_HTML);
+                }
+            }
+        }
     });
 
     proxyMap[uniqueId] = proxyMiddleware;
@@ -40,6 +80,14 @@ function handleProxyAgentWorkspace(uniqueId: string) {
         pathRewrite: {
             "^/": "/",
         },
+        on: {
+            error: (err, req, res: any) => {
+                if (res.writeHead && !res.headersSent) {
+                    res.writeHead(503, { "Content-Type": "text/html" });
+                    res.end(STARTING_HTML);
+                }
+            }
+        }
     });
 
     proxyAgentMap[uniqueId] = proxyMiddleware;
@@ -63,6 +111,9 @@ function handleProxy(req: Request, res: Response, next: NextFunction) {
     if (!uniqueId) {
         return res.status(400).json({ error: "Invalid preview URL." });
     }
+
+    // Refresh the idle timer for this preview asynchronously
+    void recordActivity(uniqueId);
 
     if (host.includes("preview")) {
         return handleProxyAgent(uniqueId)(req, res, next);
