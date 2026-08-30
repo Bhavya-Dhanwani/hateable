@@ -2,9 +2,11 @@ import amqplib from "amqplib";
 import logger from "../config/logger.config.js";
 import env from "../config/env.config.js";
 import ApiError from "../utils/ApiError.util.js";
-import Project from "../models/project.model.js";
+import ProjectDao from "../dao/project.dao.js";
+import { getRedisClient } from "../config/redis.config.js";
 
 let channel: amqplib.Channel | null = null;
+const projectDao = new ProjectDao();
 
 export async function connectToBroker() {
     try {
@@ -58,13 +60,19 @@ export async function startProjectConsumer() {
 
         try {
             // Store or update the project in the database
-            const project = await Project.findOneAndUpdate(
-                { projectId },
-                { podName, serviceName, userId },
-                { upsert: true, new: true }
-            );
+            const project = await projectDao.upsertProject(projectId, { podName, serviceName, userId });
 
-            logger.info(`Successfully stored project in db: ${project._id} (projectId: ${projectId})`);
+            logger.info(`Successfully stored project in db: ${project ? project._id : "upserted"} (projectId: ${projectId})`);
+
+            // Cache the project metadata in Redis for fast access
+            try {
+                const redis = getRedisClient();
+                const key = `project:${projectId}:metadata`;
+                await redis.set(key, JSON.stringify({ projectId, podName, serviceName, userId }), "EX", 86400);
+                logger.info(`Cached project metadata in Redis for projectId: ${projectId}`);
+            } catch (redisCacheError) {
+                logger.error(redisCacheError, `Failed to cache project in Redis for projectId: ${projectId}`);
+            }
             
             // Delete the message from the broker by acknowledging it
             activeChannel.ack(msg);

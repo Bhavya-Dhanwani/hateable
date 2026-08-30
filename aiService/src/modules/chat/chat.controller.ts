@@ -1,0 +1,231 @@
+// Importing modules
+import { Request, Response, NextFunction } from "express";
+import { AIMessage, AIMessageChunk, ToolMessage } from "langchain";
+import { BaseMessage } from "@langchain/core/messages";
+import env from "../../shared/config/env.config.js";
+import logger from "../../shared/config/logger.config.js";
+import { getStream } from "../../shared/services/ai.service.js";
+import ProjectDao from "../../shared/dao/project.dao.js";
+import ConversationDao from "../../shared/dao/conversation.dao.js";
+import {
+	getConversationHistory,
+	flushConversationToDB
+} from "../../shared/services/redis.service.js";
+import BadRequest from "../../shared/errors/BadRequest.error.js";
+import Unauthorized from "../../shared/errors/Unauthorized.error.js";
+import { resolveProject } from "./utils/project.util.js";
+import { resolveConversation, generateAndSaveTitle } from "./utils/conversation.util.js";
+import {
+	saveUserMessage,
+	saveAssistantMessage,
+	saveAssistantToolCalls,
+	saveToolResponse
+} from "./utils/chatCache.util.js";
+import { mapLangChainToCached, MessageWithMetadata } from "../../shared/utils/messageMapper.util.js";
+
+// class to handle chat operations
+class ChatController {
+	projectDao: ProjectDao;
+	conversationDao: ConversationDao;
+
+	constructor() {
+		// initializing the project dao
+		this.projectDao = new ProjectDao();
+
+		// initializing the conversation dao
+		this.conversationDao = new ConversationDao();
+	}
+
+	// handle user messages and stream agent responses
+	chatHandler = async (req: Request & { user?: Record<string, unknown> }, res: Response, next: NextFunction) => {
+		const { conversationId, projectId, message } = req.body;
+		const userId = req.user?.userId || req.user?._id;
+
+		if (!projectId || !message) {
+			throw new BadRequest("projectId and message are required fields.");
+		}
+
+		if (!userId) {
+			throw new Unauthorized("User authentication failed. No user ID found.");
+		}
+
+		// 1. Resolve project
+		const project = await resolveProject(projectId, this.projectDao);
+		let fileServerUrl = `http://${project.serviceName}:8000/api`;
+
+		if (env.NODE_ENV === "development" && (!project.serviceName || project.serviceName === "localhost")) {
+			fileServerUrl = "http://localhost:8080";
+		}
+
+		// 2. Resolve conversation
+		let {
+			conversationId: resolvedConversationId,
+			conversationTitle,
+			isNewConversation,
+			cachedConvo
+		} = await resolveConversation(conversationId, projectId, userId.toString(), this.conversationDao);
+
+		// 3. Generate title if it is a new conversation
+		if (isNewConversation && cachedConvo) {
+			conversationTitle = await generateAndSaveTitle(resolvedConversationId, cachedConvo, message, this.conversationDao);
+		}
+
+		// 4. Cache user message
+		await saveUserMessage(resolvedConversationId, message);
+
+		// 5. Establish SSE connection
+		res.setHeader("Content-Type", "text/event-stream");
+		res.setHeader("Cache-Control", "no-cache");
+		res.setHeader("Connection", "keep-alive");
+		res.flushHeaders();
+
+		// stream the title event first
+		res.write(`event: title\ndata: ${JSON.stringify({ conversationId: resolvedConversationId, title: conversationTitle })}\n\n`);
+
+		// 6. Load prior messages from cache
+		const history = await getConversationHistory(resolvedConversationId);
+
+		// 7. Track flushing to database
+		let isFlushed = false;
+
+		const flushDatabase = async () => {
+
+			if (isFlushed) {
+				return;
+			}
+
+			isFlushed = true;
+
+			try {
+				await flushConversationToDB(resolvedConversationId);
+			} catch (flushErr) {
+				logger.error(flushErr as Error, `Failed to flush conversation ${resolvedConversationId} to MongoDB`);
+			}
+
+		};
+
+		// attach listener for client disconnects
+		req.on("close", async () => {
+			logger.info(`Client disconnected from SSE stream for conversation: ${resolvedConversationId}`);
+			await flushDatabase();
+		});
+
+		try {
+
+			// 8. Stream the agent using our helper service
+			const stream = await getStream({ messages: history, fileServerUrl });
+
+			let aiMessage = "";
+			let promptTokens = 0;
+			let completionTokens = 0;
+			let totalTokens = 0;
+
+			let cachedCount = history.length;
+
+			for await (const [streamMode, chunk] of stream) {
+
+				if (streamMode === "messages") {
+
+					const messageChunk = chunk[0] as MessageWithMetadata;
+
+					if (messageChunk) {
+
+						// accumulate token usage metrics
+						if (messageChunk.usage_metadata) {
+							promptTokens += messageChunk.usage_metadata.input_tokens || 0;
+							completionTokens += messageChunk.usage_metadata.output_tokens || 0;
+							totalTokens += messageChunk.usage_metadata.total_tokens || 0;
+						}
+
+						if (typeof messageChunk.content === "string" && messageChunk.content.length > 0) {
+							res.write(`event: token\ndata: ${JSON.stringify({ text: messageChunk.content })}\n\n`);
+							aiMessage += messageChunk.content;
+						}
+
+					}
+
+				} else if (streamMode === "values") {
+
+					const currentMessages = chunk.messages as BaseMessage[];
+
+					if (currentMessages && currentMessages.length > cachedCount) {
+
+						const newMessages = currentMessages.slice(cachedCount);
+
+						for (const msg of newMessages) {
+
+							const cachedMsg = mapLangChainToCached(msg);
+
+							if (cachedMsg.role === "assistant" && cachedMsg.toolCalls && cachedMsg.toolCalls.length > 0) {
+
+								// stream the tool call event to the chatbot
+								res.write(`event: tool_call\ndata: ${JSON.stringify({ toolCalls: cachedMsg.toolCalls })}\n\n`);
+
+								// cache the assistant's message with tool calls in redis
+								await saveAssistantToolCalls(resolvedConversationId, cachedMsg.toolCalls);
+
+							} else if (cachedMsg.role === "tool") {
+
+								// stream the tool response event to the chatbot
+								res.write(`event: tool_response\ndata: ${JSON.stringify({
+									toolCallId: cachedMsg.toolCallId,
+									name: cachedMsg.name,
+									content: cachedMsg.content
+								})}\n\n`);
+
+								// cache the tool message in redis
+								await saveToolResponse(resolvedConversationId, cachedMsg.toolCallId || "", cachedMsg.name || "", cachedMsg.content || "");
+
+							}
+
+						}
+
+						cachedCount = currentMessages.length;
+
+					}
+
+				}
+
+			}
+
+			// if we generated any assistant response, write the final assistant text to redis
+			if (aiMessage.trim().length > 0) {
+				await saveAssistantMessage(resolvedConversationId, aiMessage, promptTokens, completionTokens, totalTokens);
+			}
+
+			// 9. Send completion details
+			const tokensUsed = { promptTokens, completionTokens, totalTokens };
+
+			res.write(`event: complete\ndata: ${JSON.stringify({
+				conversationId: resolvedConversationId,
+				message: aiMessage,
+				tokensUsed
+			})}\n\n`);
+
+			res.end();
+
+			// 10. Flush cached messages to database (non-blocking background task)
+			flushDatabase().catch((flushErr) => {
+				logger.error(flushErr as Error, `Failed to flush conversation ${resolvedConversationId} to MongoDB`);
+			});
+
+		} catch (streamError) {
+
+			const err = streamError as Error;
+			logger.error(err, "Error during SSE generation stream");
+
+			res.write(`event: error\ndata: ${JSON.stringify({ message: err.message || "An error occurred during generation." })}\n\n`);
+			res.end();
+
+			// Flush cached messages to database (non-blocking background task)
+			flushDatabase().catch((flushErr) => {
+				logger.error(flushErr as Error, `Failed to flush conversation ${resolvedConversationId} to MongoDB`);
+			});
+
+		}
+
+	};
+
+}
+
+export default ChatController;

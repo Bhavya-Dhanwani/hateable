@@ -27,6 +27,9 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@langchain/core": "^1.2.9",
+    "@langchain/langgraph": "^1.4.13",
+    "@langchain/mistralai": "^1.2.0",
     "amqplib": "^2.0.1",
     "compression": "^1.8.0",
     "cookie-parser": "^1.4.7",
@@ -35,7 +38,9 @@
     "express": "^5.0.1",
     "helmet": "^8.0.0",
     "hpp": "^0.2.3",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
+    "langchain": "^1.5.10",
     "mongoose": "^9.9.4",
     "morgan": "^1.10.0",
     "pino": "^9.6.0",

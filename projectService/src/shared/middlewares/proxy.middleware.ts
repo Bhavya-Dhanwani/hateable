@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import { ServerResponse } from "node:http";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import { recordActivity, onPreviewReaped } from "../services/activity.service.js";
 
@@ -51,10 +52,11 @@ function handleProxyAgent(uniqueId: string) {
             "^/": "/",
         },
         on: {
-            error: (err, req, res: any) => {
-                if (res.writeHead && !res.headersSent) {
-                    res.writeHead(503, { "Content-Type": "text/html" });
-                    res.end(STARTING_HTML);
+            error: (err, req, res) => {
+                const response = res as ServerResponse;
+                if (response.writeHead && !response.headersSent) {
+                    response.writeHead(503, { "Content-Type": "text/html" });
+                    response.end(STARTING_HTML);
                 }
             }
         }
@@ -81,10 +83,11 @@ function handleProxyAgentWorkspace(uniqueId: string) {
             "^/": "/",
         },
         on: {
-            error: (err, req, res: any) => {
-                if (res.writeHead && !res.headersSent) {
-                    res.writeHead(503, { "Content-Type": "text/html" });
-                    res.end(STARTING_HTML);
+            error: (err, req, res) => {
+                const response = res as ServerResponse;
+                if (response.writeHead && !response.headersSent) {
+                    response.writeHead(503, { "Content-Type": "text/html" });
+                    response.end(STARTING_HTML);
                 }
             }
         }

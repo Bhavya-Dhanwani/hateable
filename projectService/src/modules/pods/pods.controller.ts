@@ -13,7 +13,7 @@ class PodsController {
     createPod = async (req: CreatePodRequest, res: Response) => {
 
         const { name: projectName } = req.body;
-        const user = (req as any).user as { userId?: string; _id?: string } | undefined;
+        const user = (req as Request & { user?: { userId?: string; _id?: string } }).user;
         const userId = user?.userId || user?._id || "";
 
         const project = new Project({
@@ -61,7 +61,7 @@ class PodsController {
     relaunchPod = async (req: Request, res: Response) => {
 
         const projectId = req.params.projectId as string;
-        const user = (req as any).user as { userId?: string; _id?: string } | undefined;
+        const user = (req as Request & { user?: { userId?: string; _id?: string } }).user;
         const currentUserId = user?.userId || user?._id || "";
 
         const project = await Project.findById(projectId);

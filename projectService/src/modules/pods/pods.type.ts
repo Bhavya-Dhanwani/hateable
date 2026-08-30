@@ -3,7 +3,7 @@ import { Request } from "express";
 import { ParsedQs } from "qs";
 
 export interface CreatePodRequestBody {
-    name?: string;
+	name?: string;
 }
 
-export type CreatePodRequest = Request<any, any, CreatePodRequestBody, any>;
+export type CreatePodRequest = Request<Record<string, string>, unknown, CreatePodRequestBody, ParsedQs>;
