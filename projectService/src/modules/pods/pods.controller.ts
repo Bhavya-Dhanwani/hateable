@@ -12,13 +12,14 @@ class PodsController {
 
     createPod = async (req: CreatePodRequest, res: Response) => {
 
-        const { name: projectName } = req.body;
+        const { name: projectName, projectType } = req.body;
         const user = (req as Request & { user?: { userId?: string; _id?: string } }).user;
         const userId = user?.userId || user?._id || "";
 
         const project = new Project({
             status: "starting",
             projectName: projectName as string,
+            projectType: projectType as string,
             userId: userId
         });
         await project.save();
@@ -30,8 +31,8 @@ class PodsController {
         const projectId = uniqueId;
         
         try {
-            await createPod(podName, projectId);
-            await createService(serviceName, podName);
+            await createPod(podName, projectId, projectType as string);
+            await createService(serviceName, podName, projectType as string);
             await recordActivity(uniqueId);
 
             project.status = "running";
@@ -93,8 +94,8 @@ class PodsController {
             await deleteService(serviceName);
 
             // Recreate Kubernetes pod and service
-            await createPod(podName, projectId);
-            await createService(serviceName, podName);
+            await createPod(podName, projectId, project.projectType as string);
+            await createService(serviceName, podName, project.projectType as string);
             await recordActivity(projectId);
 
             project.status = "running";

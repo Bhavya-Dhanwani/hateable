@@ -11,6 +11,11 @@ const projectSchema = new mongoose.Schema({
         type: String,
         required: false
     },
+    projectType: {
+        type: String,
+        enum: ["next-js", "next-ts", "node-js", "node-ts", "react-js", "react-ts", "mern-js", "mern-ts"],
+        required: true
+    },
     userId: {
         type: String,
         required: false

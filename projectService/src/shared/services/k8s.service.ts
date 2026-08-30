@@ -6,7 +6,140 @@ kc.loadFromCluster();
 
 const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
 
-export async function createPod(podName: string, projectId: string) {
+export async function createPod(podName: string, projectId: string, projectType: string) {
+
+    let appImage = "";
+    let appPort = 3000;
+    let appCommand: string[] | undefined = undefined;
+
+    let initContainers: k8s.V1Container[] = [];
+    let appContainers: k8s.V1Container[] = [];
+
+    if (projectType === "next-js") {
+        appImage = "next-image-js";
+        appPort = 3000;
+    } else if (projectType === "next-ts") {
+        appImage = "next-image-ts";
+        appPort = 3000;
+    } else if (projectType === "node-js") {
+        appImage = "node-image-js";
+        appPort = 5000;
+    } else if (projectType === "node-ts") {
+        appImage = "node-image-ts";
+        appPort = 5000;
+    } else if (projectType === "react-js") {
+        appImage = "react-image-js";
+        appPort = 5173;
+        appCommand = ["npm", "run", "dev", "--", "--host"];
+    } else if (projectType === "react-ts") {
+        appImage = "react-image-ts";
+        appPort = 5173;
+        appCommand = ["npm", "run", "dev", "--", "--host"];
+    }
+
+    if (projectType === "mern-js" || projectType === "mern-ts") {
+        const isTs = projectType === "mern-ts";
+        const clientImg = isTs ? "mern-image-ts-client" : "mern-image-js-client";
+        const serverImg = isTs ? "mern-image-ts-server" : "mern-image-js-server";
+
+        initContainers = [
+            {
+                name: "init-client",
+                image: clientImg,
+                command: ["sh", "-c", "mkdir -p /app-copy/client && cp -r /app/* /app-copy/client/"],
+                volumeMounts: [
+                    {
+                        name: "app-volume",
+                        mountPath: "/app-copy"
+                    }
+                ]
+            },
+            {
+                name: "init-server",
+                image: serverImg,
+                command: ["sh", "-c", "mkdir -p /app-copy/server && cp -r /app/* /app-copy/server/"],
+                volumeMounts: [
+                    {
+                        name: "app-volume",
+                        mountPath: "/app-copy"
+                    }
+                ]
+            }
+        ];
+
+        appContainers = [
+            {
+                name: "client-container",
+                image: clientImg,
+                imagePullPolicy: "IfNotPresent",
+                ports: [{ containerPort: 5173 }],
+                command: ["npm", "run", "dev", "--", "--host"],
+                resources: {
+                    requests: { memory: "512Mi", cpu: "250m" },
+                    limits: { memory: "1024Mi", cpu: "500m" }
+                },
+                volumeMounts: [
+                    {
+                        name: "app-volume",
+                        mountPath: "/app",
+                        subPath: "client"
+                    }
+                ]
+            },
+            {
+                name: "server-container",
+                image: serverImg,
+                imagePullPolicy: "IfNotPresent",
+                ports: [{ containerPort: 5000 }],
+                command: ["npm", "run", "dev"],
+                resources: {
+                    requests: { memory: "512Mi", cpu: "250m" },
+                    limits: { memory: "1024Mi", cpu: "500m" }
+                },
+                volumeMounts: [
+                    {
+                        name: "app-volume",
+                        mountPath: "/app",
+                        subPath: "server"
+                    }
+                ]
+            }
+        ];
+    } else {
+        initContainers = [
+            {
+                name: "init-container",
+                image: appImage,
+                command: ["sh", "-c", "mkdir -p /app-copy && cp -r /app/* /app-copy/"],
+                volumeMounts: [
+                    {
+                        name: "app-volume",
+                        mountPath: "/app-copy"
+                    }
+                ]
+            }
+        ];
+
+        appContainers = [
+            {
+                name: "app-container",
+                image: appImage,
+                imagePullPolicy: "IfNotPresent",
+                ports: [{ containerPort: appPort }],
+                command: appCommand,
+                resources: {
+                    requests: { memory: "1024Mi", cpu: "500m" },
+                    limits: { memory: "2048Mi", cpu: "1000m" }
+                },
+                volumeMounts: [
+                    {
+                        name: "app-volume",
+                        mountPath: "/app"
+                    }
+                ]
+            }
+        ];
+    }
 
     const podManifest: k8s.V1Pod = {
         apiVersion: "v1",
@@ -22,38 +155,10 @@ export async function createPod(podName: string, projectId: string) {
                     emptyDir: {}
                 }
             ],
-            initContainers: [
-                {
-                    name: "init-container",
-                    image: "nextjs-image",
-                    command: ["sh", "-c", "mkdir -p /app-copy && cp -r /app/* /app-copy/"],
-                    volumeMounts: [
-                        {
-                            name: "app-volume",
-                            mountPath: "/app-copy"
-                        }
-                    ]
-                }
-            ],
+            initContainers: initContainers,
             containers: [
+                ...appContainers,
                 {
-                    name: "nextjs-container",
-                    image: "nextjs-image",
-                    imagePullPolicy: "IfNotPresent",
-                    ports: [{ containerPort: 3000 }],
-                    resources: {
-                        requests: { memory: "1024Mi", cpu: "500m" },
-                        limits: { memory: "2048Mi", cpu: "1000m" }
-                    },
-                    volumeMounts: [
-                        {
-                            name: "app-volume",
-                            mountPath: "/app",
-                            // subPath: "app-copy"
-                        }
-                    ]
-                },
-                 {
                     name: "express-container",
                     image: "express-image",
                     imagePullPolicy: "IfNotPresent",
@@ -68,8 +173,8 @@ export async function createPod(podName: string, projectId: string) {
                             mountPath: "/app"
                         }
                     ]
-                 },
-                 {
+                },
+                {
                     name: "sync-container",
                     image: "sync-image",
                     imagePullPolicy: "IfNotPresent",
@@ -119,7 +224,7 @@ export async function createPod(podName: string, projectId: string) {
                             value: "http://host.docker.internal:9000"
                         }
                     ]
-                 }
+                }
             ]
         }, 
     };
@@ -133,7 +238,25 @@ export async function createPod(podName: string, projectId: string) {
     logger.info(`Response: ${JSON.stringify(response)}`);
 }
 
-export async function createService(serviceName: string, podName: string) {
+export async function createService(serviceName: string, podName: string, projectType: string) {
+
+    let targetPort = 3000;
+    if (projectType === "next-js" || projectType === "next-ts") {
+        targetPort = 3000;
+    } else if (projectType === "node-js" || projectType === "node-ts") {
+        targetPort = 5000;
+    } else if (projectType === "react-js" || projectType === "react-ts" || projectType === "mern-js" || projectType === "mern-ts") {
+        targetPort = 5173;
+    }
+
+    const ports: k8s.V1ServicePort[] = [
+        { protocol: "TCP", port: 80, targetPort: targetPort, name: "preview-port" },
+        { protocol: "TCP", port: 8000, targetPort: 8080, name: "file-server-port" }
+    ];
+
+    if (projectType === "mern-js" || projectType === "mern-ts" || projectType === "node-js" || projectType === "node-ts") {
+        ports.push({ protocol: "TCP", port: 5000, targetPort: 5000, name: "backend-port" });
+    }
 
     const serviceManifest: k8s.V1Service = {
         apiVersion: "v1",
@@ -144,10 +267,7 @@ export async function createService(serviceName: string, podName: string) {
         },
         spec: {
             selector: { app: podName },
-            ports: [
-                { protocol: "TCP", port: 80, targetPort: 3000, name: "preview-port" },
-                { protocol: "TCP", port: 8000, targetPort: 8080, name: "file-server-port" }
-            ],
+            ports: ports,
             type: "ClusterIP"
         }
     };

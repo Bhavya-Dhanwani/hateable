@@ -42,8 +42,8 @@ build:
           - src: 'src/**/*.ts'
             dest: /app
 
-    - image: nextjs-image
-      context: nextjsboilerplate
+    - image: next-image-js
+      context: boilerplates/nextjsboilerplatejs
       docker:
         dockerfile: Dockerfile
       sync:
@@ -54,7 +54,134 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% nextjs-image:latest && docker tag %SKAFFOLD_IMAGE% nextjs-image:v2"]
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% next-image-js:latest"]
+
+    - image: next-image-ts
+      context: boilerplates/nextjsboilerplatets
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.{js,jsx,ts,tsx,css}'
+            dest: /app
+          - src: 'public/**/*'
+            dest: /app
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% next-image-ts:latest"]
+
+    - image: node-image-js
+      context: boilerplates/nodejsboilerplatejs
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.js'
+            dest: /app
+          - src: 'server.js'
+            dest: /app
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% node-image-js:latest"]
+
+    - image: node-image-ts
+      context: boilerplates/nodejsboilerplatets
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.ts'
+            dest: /app
+          - src: 'server.ts'
+            dest: /app
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% node-image-ts:latest"]
+
+    - image: react-image-js
+      context: boilerplates/reactjsboilerplatejs
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.{js,jsx,css}'
+            dest: /app
+          - src: 'public/**/*'
+            dest: /app
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% react-image-js:latest"]
+
+    - image: react-image-ts
+      context: boilerplates/reactjsboilerplatets
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.{js,jsx,ts,tsx,css}'
+            dest: /app
+          - src: 'public/**/*'
+            dest: /app
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% react-image-ts:latest"]
+
+    - image: mern-image-js-client
+      context: boilerplates/mernboilerplatejs/client
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.{js,jsx,css}'
+            dest: /app
+          - src: 'public/**/*'
+            dest: /app
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% mern-image-js-client:latest"]
+
+    - image: mern-image-js-server
+      context: boilerplates/mernboilerplatejs/server
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.js'
+            dest: /app
+          - src: 'server.js'
+            dest: /app
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% mern-image-js-server:latest"]
+
+    - image: mern-image-ts-client
+      context: boilerplates/mernboilerplatets/client
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.{js,jsx,ts,tsx,css}'
+            dest: /app
+          - src: 'public/**/*'
+            dest: /app
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% mern-image-ts-client:latest"]
+
+    - image: mern-image-ts-server
+      context: boilerplates/mernboilerplatets/server
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: 'src/**/*.ts'
+            dest: /app
+          - src: 'server.ts'
+            dest: /app
+      hooks:
+        after:
+          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% mern-image-ts-server:latest"]
+
 
     - image: express-image
       context: express-file-server
