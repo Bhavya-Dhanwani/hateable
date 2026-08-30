@@ -26,6 +26,7 @@ const envSchema = z.object({
     GOOGLE_CLIENT_ID: z.string().default(envConstants.GOOGLE_CLIENT_ID),
     GOOGLE_CLIENT_SECRET: z.string().default(envConstants.GOOGLE_CLIENT_SECRET),
     GOOGLE_REDIRECT_URI: z.string().url().default(envConstants.GOOGLE_REDIRECT_URI),
+    FRONTEND_URL: z.string().url().default(envConstants.FRONTEND_URL),
 });
 
 // parsing and validating environment variables
