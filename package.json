@@ -1,0 +1,29 @@
+{
+  "name": "hateable-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo for Hateable services and applications",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@secretlint/secretlint-rule-preset-recommend": "^9.0.0",
+    "eslint": "^10.8.0",
+    "husky": "^9.1.5",
+    "lint-staged": "^15.4.3",
+    "prettier": "^3.4.2",
+    "secretlint": "^9.0.0"
+  },
+  "lint-staged": {
+    "*": [
+      "secretlint"
+    ],
+    "*.{js,ts,jsx,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  }
+}

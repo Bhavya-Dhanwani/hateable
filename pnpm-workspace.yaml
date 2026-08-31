@@ -1,0 +1,12 @@
+packages:
+  - 'aiService'
+  - 'authService'
+  - 'express-file-server'
+  - 'projectService'
+  - 'syncService'
+  - 'boilerplates/**'
+allowBuilds:
+  '@parcel/watcher': true
+  '@scarf/scarf': true
+  esbuild: true
+  unrs-resolver: true

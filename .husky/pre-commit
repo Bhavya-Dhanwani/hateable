@@ -1,0 +1,36 @@
+#!/bin/sh
+
+echo "=== Pre-Commit Checks ==="
+
+# 1. Run secret scanning, ESLint, and Prettier formatting on staged files
+echo "1. Running secretlint, eslint, and prettier formatting..."
+npx lint-staged
+if [ $? -ne 0 ]; then
+  echo "❌ Linting or secret check failed. Commit aborted."
+  exit 1
+fi
+
+# 2. Prevent empty commits and commits containing only whitespace changes
+echo "2. Checking for meaningful code changes..."
+if git diff --cached --quiet -w; then
+  echo "❌ Error: No meaningful changes detected (whitespace-only or empty commit)."
+  exit 1
+fi
+
+# 3. Verify TypeScript type correctness across workspace packages
+echo "3. Running TypeScript type-checking..."
+pnpm -r --if-present typecheck
+if [ $? -ne 0 ]; then
+  echo "❌ TypeScript type-checking failed. Commit aborted."
+  exit 1
+fi
+
+# 4. Scan dependencies for security vulnerabilities (high/critical)
+echo "4. Running dependency security audit..."
+pnpm audit --audit-level=high
+if [ $? -ne 0 ]; then
+  echo "❌ Security audit failed (high/critical vulnerabilities found). Commit aborted."
+  exit 1
+fi
+
+echo "✅ All checks passed successfully!"
