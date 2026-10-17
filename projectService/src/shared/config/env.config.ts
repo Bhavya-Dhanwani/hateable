@@ -22,6 +22,9 @@ const envSchema = z.object({
   DEPLOY_DOMAIN: z.string().default(envConstants.DEPLOY_DOMAIN),
   DEPLOY_PROTOCOL: z.enum(['http', 'https']).default(envConstants.DEPLOY_PROTOCOL),
 
+  // public IP of the ingress, shown as the A record for bare custom domains (shop.com)
+  DEPLOY_INGRESS_IP: z.string().default(envConstants.DEPLOY_INGRESS_IP),
+
   // how long a deployment may go without a visitor before it is put to sleep
   DEPLOY_IDLE_TTL_MS: z.coerce.number().default(envConstants.DEPLOY_IDLE_TTL_MS),
 

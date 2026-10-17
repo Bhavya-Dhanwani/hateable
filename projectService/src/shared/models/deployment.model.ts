@@ -47,6 +47,14 @@ const deploymentSchema = new mongoose.Schema(
     deployedAt: {
       type: Date,
       default: Date.now
+    },
+
+    // the site's environment variables as AES-256-GCM encrypted JSON (crypto.util.ts);
+    // select: false keeps it out of every query unless asked for with .select('+env')
+    env: {
+      type: String,
+      default: '',
+      select: false
     }
   },
   {

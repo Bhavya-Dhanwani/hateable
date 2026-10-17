@@ -1,11 +1,7 @@
-import { ArrowLeft, ArrowUpRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
-import { deploymentsApi } from '../api/projects.js';
-import { LoadingScreen } from '../components/LoadingScreen.jsx';
-import { DeploymentLogs } from '../components/deployment/DeploymentLogs.jsx';
-import { SiteAssistant } from '../components/deployment/SiteAssistant.jsx';
-import { withIngressPort } from '../utils/ingressUrl.js';
+import { useParams } from 'react-router';
+import { deploymentsApi } from '../../api/projects.js';
+import { PageHeader, PageMessage } from './DeploymentLayout.jsx';
 
 const RANGES = [7, 14, 30];
 const REFRESH_MS = 10_000;
@@ -161,110 +157,60 @@ export function AnalyticsPage() {
     };
   }, [projectId, days]);
 
-  if (!data && !error) return <LoadingScreen label="Loading analytics" />;
+  if (!data) return <PageMessage>{error || 'Loading analytics...'}</PageMessage>;
 
-  if (!data) {
-    return (
-      <main className="grid min-h-svh place-items-center bg-ink px-5 text-center text-sm">
-        <div>
-          <p className="text-white">No analytics yet</p>
-          <p className="mt-1 text-white/40">{error}</p>
-          <Link
-            to={`/projects/${projectId}`}
-            className="mt-4 inline-block text-white/60 underline decoration-white/20 underline-offset-4 hover:text-white"
-          >
-            Back to the workspace
-          </Link>
-        </div>
-      </main>
-    );
-  }
-
-  const { analytics, deployment, status } = data;
+  const { analytics, deployment } = data;
   const { totals, statusCodes } = analytics;
-  const url = withIngressPort(data.url);
   const errors = (statusCodes['4xx'] || 0) + (statusCodes['5xx'] || 0);
 
   return (
-    <main className="min-h-svh bg-ink text-white">
-      <div className="mx-auto max-w-3xl px-5 py-10 sm:py-16">
-        <header className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <Link
-              to={`/projects/${projectId}`}
-              className="inline-flex items-center gap-1.5 text-xs text-white/40 transition-colors hover:text-white"
+    <>
+      <PageHeader title="Analytics" description="Who visits your site, and how it responds.">
+        <div className="flex gap-1 text-xs" role="tablist" aria-label="Range">
+          {RANGES.map((range) => (
+            <button
+              key={range}
+              type="button"
+              role="tab"
+              aria-selected={days === range}
+              onClick={() => setDays(range)}
+              className={`h-7 rounded-md px-2.5 tabular-nums transition-colors ${
+                days === range ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'
+              }`}
             >
-              <ArrowLeft className="size-3.5" /> Workspace
-            </Link>
-            <h1 className="mt-4 text-xl font-medium tracking-tight">{deployment.slug}</h1>
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              className="group mt-1 inline-flex max-w-full items-center gap-1 text-xs text-white/40 transition-colors hover:text-white"
-            >
-              <span
-                className={`mr-1 size-1.5 rounded-full ${status === 'live' ? 'bg-emerald-400' : 'bg-white/25'}`}
-              />
-              <span className="truncate font-mono">{url.replace(/^https?:\/\//, '')}</span>
-              <ArrowUpRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
-            </a>
-          </div>
-
-          <div className="flex gap-1 text-xs" role="tablist" aria-label="Range">
-            {RANGES.map((range) => (
-              <button
-                key={range}
-                type="button"
-                role="tab"
-                aria-selected={days === range}
-                onClick={() => setDays(range)}
-                className={`h-7 rounded-md px-2.5 tabular-nums transition-colors ${
-                  days === range ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'
-                }`}
-              >
-                {range}d
-              </button>
-            ))}
-          </div>
-        </header>
-
-        <dl className="mt-10 grid grid-cols-2 divide-line border-y border-line sm:grid-cols-4 sm:divide-x">
-          <Metric label="Visitors" value={compact.format(totals.visitors)} />
-          <Metric label="Page views" value={compact.format(totals.views)} />
-          <Metric
-            label="Live now"
-            value={number.format(analytics.liveVisitors)}
-            live={analytics.liveVisitors > 0}
-          />
-          <Metric label="Response" value={`${number.format(totals.avgResponseMs)}ms`} />
-        </dl>
-
-        <div className="mt-10">
-          <DailyChart daily={analytics.daily} />
+              {range}d
+            </button>
+          ))}
         </div>
+      </PageHeader>
 
-        <div className="mt-12 grid gap-10 sm:grid-cols-2">
-          <List title="Pages" rows={analytics.topPages} empty="No page views yet" />
-          <List title="Referrers" rows={analytics.topReferrers} empty="No referrers yet" />
-          <List title="Browsers" rows={fromCounts(analytics.browsers)} empty="No visitors yet" />
-          <List title="Devices" rows={fromCounts(analytics.devices)} empty="No visitors yet" />
-        </div>
+      <dl className="mt-8 grid grid-cols-2 divide-line border-y border-line sm:grid-cols-4 sm:divide-x">
+        <Metric label="Visitors" value={compact.format(totals.visitors)} />
+        <Metric label="Page views" value={compact.format(totals.views)} />
+        <Metric
+          label="Live now"
+          value={number.format(analytics.liveVisitors)}
+          live={analytics.liveVisitors > 0}
+        />
+        <Metric label="Response" value={`${number.format(totals.avgResponseMs)}ms`} />
+      </dl>
 
-        <div className="mt-14">
-          <DeploymentLogs projectId={projectId} />
-        </div>
-
-        <div className="mt-14">
-          <SiteAssistant projectId={projectId} />
-        </div>
-
-        <p className="mt-14 text-xs text-white/25 tabular-nums">
-          {number.format(totals.requests)} requests · {number.format(totals.wakes)} wake-ups ·{' '}
-          {number.format(errors)} errors · v{deployment.version}
-          {error && <span className="text-red-300/70"> · {error}</span>}
-        </p>
+      <div className="mt-10">
+        <DailyChart daily={analytics.daily} />
       </div>
-    </main>
+
+      <div className="mt-12 grid gap-10 sm:grid-cols-2">
+        <List title="Pages" rows={analytics.topPages} empty="No page views yet" />
+        <List title="Referrers" rows={analytics.topReferrers} empty="No referrers yet" />
+        <List title="Browsers" rows={fromCounts(analytics.browsers)} empty="No visitors yet" />
+        <List title="Devices" rows={fromCounts(analytics.devices)} empty="No visitors yet" />
+      </div>
+
+      <p className="mt-14 text-xs text-white/25 tabular-nums">
+        {number.format(totals.requests)} requests · {number.format(totals.wakes)} wake-ups ·{' '}
+        {number.format(errors)} errors · v{deployment.version}
+        {error && <span className="text-red-300/70"> · {error}</span>}
+      </p>
+    </>
   );
 }

@@ -8,6 +8,7 @@ const envConstants = {
   APP_URL: 'http://localhost:5173',
   DEPLOY_DOMAIN: 'hateable.localhost',
   DEPLOY_PROTOCOL: 'http',
+  DEPLOY_INGRESS_IP: '',
   DEPLOY_IDLE_TTL_MS: 15 * 60 * 1000,
   S3_ENDPOINT: 'http://s3-service:9000',
   S3_BUCKET_NAME: 'hateable-bucket',

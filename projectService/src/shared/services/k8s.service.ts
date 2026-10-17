@@ -255,13 +255,21 @@ export async function createPod(podName: string, projectId: string, projectType:
  * Unlike a preview it has no file server and no live sync: an extra init container
  * runs the sync image once (`SYNC_ONCE`) to restore the frozen snapshot from
  * `deployments/<slug>/` over the boilerplate, so the app starts on the deployed files.
+ * The owner's environment variables are given to every app container (client and server for MERN).
+ * ponytail: plain env in the pod spec, readable by anyone who can read pods; move to a k8s Secret
+ * + envFrom (needs secrets RBAC) if other tenants ever get cluster access
  */
 export async function createDeploymentPod(
   podName: string,
   snapshotId: string,
-  projectType: string
+  projectType: string,
+  envVars: Record<string, string> = {}
 ) {
   const { initContainers, appContainers } = buildAppContainers(projectType);
+  const userEnv = Object.entries(envVars).map(([name, value]) => ({ name, value }));
+  appContainers.forEach((container) => {
+    container.env = [...(container.env ?? []), ...userEnv];
+  });
 
   const podManifest: k8s.V1Pod = {
     apiVersion: 'v1',

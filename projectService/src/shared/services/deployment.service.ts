@@ -3,11 +3,13 @@ import logger from '../config/logger.config.js';
 import env from '../config/env.config.js';
 import { createDeploymentPod, createService, deletePod, deleteService } from './k8s.service.js';
 import { stopTrackingDeployment } from './activity.service.js';
+import { unsealEnvVars } from '../utils/envVars.util.js';
 
-// the slice of a Deployment document the runtime needs
+// the slice of a Deployment document the runtime needs (env: encrypted, from .select('+env'))
 interface DeploymentTarget {
   slug: string;
   projectType: string;
+  env?: string | null;
 }
 
 // kubernetes names of the resources serving a deployment
@@ -41,7 +43,8 @@ export async function startDeployment(deployment: DeploymentTarget) {
     await createDeploymentPod(
       podName,
       snapshotPrefixOf(deployment.slug).slice(0, -1),
-      deployment.projectType
+      deployment.projectType,
+      unsealEnvVars(deployment.env)
     );
     await createService(serviceName, podName, deployment.projectType);
 

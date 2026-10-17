@@ -240,10 +240,10 @@ export function DeployButton({ projectId }) {
                   {busy === 'deploy' ? 'Deploying…' : 'Redeploy'}
                 </button>
                 <Link
-                  to={`/projects/${projectId}/analytics`}
+                  to={`/projects/${projectId}/deployment`}
                   className="flex h-8 items-center justify-center gap-1.5 rounded-full border border-line text-xs text-white/80 transition hover:bg-white/5"
                 >
-                  <BarChart3 className="size-3.5" /> Analytics
+                  <BarChart3 className="size-3.5" /> Dashboard
                 </Link>
               </div>
               <button

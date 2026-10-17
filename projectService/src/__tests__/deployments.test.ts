@@ -90,3 +90,41 @@ test('a stack frame still finds its error when a stdout line lands in between', 
   assert.deepEqual(lines[0].stack, ['at List (/app/src/List.jsx:4:10)']);
   assert.equal(lines[1].stack, undefined);
 });
+
+test('deployment env vars are validated and stored encrypted', async () => {
+  const { validateEnvVars, sealEnvVars, unsealEnvVars } =
+    await import('../shared/utils/envVars.util.js');
+
+  assert.deepEqual(validateEnvVars({ ' API_URL ': 'https://x', DEBUG: '' }), {
+    vars: { API_URL: 'https://x', DEBUG: '' }
+  });
+  assert.match((validateEnvVars({ '1BAD': 'x' }) as { error: string }).error, /not a valid name/);
+  assert.match((validateEnvVars({ PORT: '8080' }) as { error: string }).error, /set by hateable/);
+  assert.match((validateEnvVars({ A: 5 }) as { error: string }).error, /must be text/);
+  assert.match(
+    (validateEnvVars({ A: 'x'.repeat(33 * 1024) }) as { error: string }).error,
+    /over 32KB/
+  );
+  assert.ok('error' in validateEnvVars(['A=1']));
+
+  const sealed = sealEnvVars({ DATABASE_URL: 'postgres://secret' });
+  assert.ok(!sealed.includes('secret'));
+  assert.deepEqual(unsealEnvVars(sealed), { DATABASE_URL: 'postgres://secret' });
+  assert.equal(sealEnvVars({}), '');
+  assert.deepEqual(unsealEnvVars(''), {});
+});
+
+test('custom domains are normalized and checked', async () => {
+  const { normalizeDomain, isApex } = await import('../shared/utils/domain.util.js');
+
+  assert.deepEqual(normalizeDomain('https://WWW.Shop.com/pricing?x=1'), { domain: 'www.shop.com' });
+  assert.deepEqual(normalizeDomain('shop.com.'), { domain: 'shop.com' });
+  assert.deepEqual(normalizeDomain('my-shop.localhost'), { domain: 'my-shop.localhost' }); // dev only
+  assert.ok('error' in normalizeDomain('localhost'));
+  assert.ok('error' in normalizeDomain('192.168.1.10'));
+  assert.ok('error' in normalizeDomain('bad_domain.com'));
+  assert.ok('error' in normalizeDomain('shululu.hateable.localhost')); // DEPLOY_DOMAIN in tests
+  assert.ok('error' in normalizeDomain(''));
+  assert.equal(isApex('shop.com'), true);
+  assert.equal(isApex('www.shop.com'), false);
+});

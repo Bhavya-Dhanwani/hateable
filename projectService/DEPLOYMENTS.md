@@ -188,9 +188,10 @@ commands and one round trip, and the controller returns the result. The frontend
   popover with the link (copy / open), the live "naps in mm:ss" countdown, **Redeploy**,
   **Analytics** and **Unpublish**. The countdown converts the server's `idleRemainingMs` into a
   wall-clock `sleepsAt` time and ticks locally.
-- [AnalyticsPage.jsx](../frontend/src/pages/AnalyticsPage.jsx) at `/projects/:id/analytics` has stat tiles, a
-  page-views-per-day bar chart with hover tooltip and a table view, and ranked lists for pages,
-  referrers, devices and browsers.
+- The deployment dashboard lives under `/projects/:id/deployment`, one page per job, with a
+  sidebar (a tab row on phones) from [DeploymentLayout.jsx](../frontend/src/pages/deployment/DeploymentLayout.jsx):
+  **Overview** (status, addresses, today, recent activity) · **Analytics** · **Logs** ·
+  **Domains** · **Environment** · **Ask AI**. The old `/projects/:id/analytics` URL redirects there.
 - [ingressUrl.js](../frontend/src/utils/ingressUrl.js): in dev the ingress listens on :8088, so links get that port.
   Set `VITE_PREVIEW_PORT=` (empty) in prod.
 
@@ -198,12 +199,48 @@ commands and one round trip, and the controller returns the result. The frontend
 
 ## 7. API
 
-| method | path                                                | does                                                                                      |
-| ------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| GET    | `/api/projects/:id/deployment`                      | `{ deployment, url, status: live\|sleeping, idleRemainingMs }`, or `{ deployment: null }` |
-| POST   | `/api/projects/:id/deployment`                      | deploy or redeploy (201 first time, 200 after)                                            |
-| DELETE | `/api/projects/:id/deployment`                      | unpublish: pod, snapshot and analytics deleted, slug freed                                |
-| GET    | `/api/projects/:id/deployment/analytics?days=1..30` | dashboard data                                                                            |
+| method | path                                                  | does                                                                                      |
+| ------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| GET    | `/api/projects/:id/deployment`                        | `{ deployment, url, status: live\|sleeping, idleRemainingMs }`, or `{ deployment: null }` |
+| POST   | `/api/projects/:id/deployment`                        | deploy or redeploy (201 first time, 200 after)                                            |
+| DELETE | `/api/projects/:id/deployment`                        | unpublish: pod, snapshot and analytics deleted, slug freed                                |
+| GET    | `/api/projects/:id/deployment/analytics?days=1..30`   | dashboard data                                                                            |
+| GET    | `/api/projects/:id/deployment/logs`                   | optimized app logs (live or last run) + lifecycle events                                  |
+| GET    | `/api/projects/:id/deployment/env`                    | the site's env vars, decrypted (owner only)                                               |
+| PUT    | `/api/projects/:id/deployment/env`                    | replace them (`{ vars }`); an awake site restarts to pick them up                         |
+| GET    | `/api/projects/:id/deployment/domains`                | custom domains + the DNS records each one needs                                           |
+| POST   | `/api/projects/:id/deployment/domains`                | connect a domain (`{ domain }`), pending until verified                                   |
+| POST   | `/api/projects/:id/deployment/domains/:domain/verify` | check its DNS; it serves the site once the TXT record is found                            |
+| DELETE | `/api/projects/:id/deployment/domains/:domain`        | disconnect it                                                                             |
+
+### Environment variables
+
+Stored in the Deployment document as AES-256-GCM encrypted JSON ([envVars.util.ts](src/shared/utils/envVars.util.ts)),
+with `select: false` so no query returns them unless it asks for `+env`. They are decrypted and
+added to every app container each time the pod starts (deploy, redeploy, wake). Env is read at
+process start, so saving restarts an awake site; a sleeping one gets the new values when it wakes.
+`PORT` and `HOSTNAME` are reserved: the dev servers listen on `PORT` and Next.js binds to `HOSTNAME`.
+
+### Custom domains
+
+1. The owner adds `www.shop.com`. A random token is stored with it ([customDomain.model.ts](src/shared/models/customDomain.model.ts)).
+2. The Domains page shows two records to create:
+   - `TXT _hateable.www.shop.com = hateable-verify=<token>`: proves they control the domain.
+     An A record alone proves nothing, since every domain pointed at the shared ingress looks the same.
+   - `CNAME www.shop.com -> <slug>.<DEPLOY_DOMAIN>` (or an `A` record to `DEPLOY_INGRESS_IP` for a
+     bare `shop.com`, which cannot have a CNAME): sends the traffic.
+3. **Verify** does real DNS lookups ([domain.service.ts](src/shared/services/domain.service.ts)). Once the TXT
+   record matches, the domain is `verified`.
+4. The proxy maps the request's host to the deployment's slug (cached 30 s, hits and misses), then
+   it is the same site: same pod, idle timer, analytics and logs.
+
+In development `*.localhost` domains verify without DNS, because they always resolve to your machine.
+
+**Ingress.** The hateable API rules are scoped to the app's own host (`localhost` in dev), and a
+host-less catch-all sends every other host to projectService. Host-less API rules would also match
+custom domains, so `www.shop.com/api/auth/login` would reach hateable's auth service instead of
+the user's site. Locally, API calls through `127.0.0.1:8088` therefore need `-H 'Host: localhost'`
+(the Vite dev proxy already sends it).
 
 ---
 
@@ -217,9 +254,15 @@ commands and one round trip, and the controller returns the result. The frontend
 1. DNS: a wildcard record `*.hateable.bhavyadhanwani.dev` pointing at the ingress load balancer.
 2. TLS: a wildcard certificate. Let's Encrypt only issues wildcards through the **DNS-01**
    challenge, e.g. cert-manager with your DNS provider's solver.
-3. [k8s/ingress.yml](../k8s/ingress.yml): change the host to `*.hateable.bhavyadhanwani.dev` and add the `tls:` block.
-4. [k8s/project-deployment.yml](../k8s/project-deployment.yml): set `DEPLOY_DOMAIN=hateable.bhavyadhanwani.dev`,
-   `DEPLOY_PROTOCOL=https`, and `APP_URL` to your frontend URL.
+3. [k8s/ingress.yml](../k8s/ingress.yml): change the deploy host to `*.hateable.bhavyadhanwani.dev`, the API host
+   from `localhost` to `hateable.bhavyadhanwani.dev`, and add the `tls:` block.
+4. Custom domains over HTTPS need a certificate per domain. With cert-manager, create a
+   `Certificate` (HTTP-01) for each verified domain and list it under the ingress `tls:`; or put a
+   TLS terminator that issues on demand (e.g. Caddy's on-demand TLS, asking projectService whether
+   the host is a verified domain) in front of the catch-all. Not automated yet.
+5. [k8s/project-deployment.yml](../k8s/project-deployment.yml): set `DEPLOY_DOMAIN=hateable.bhavyadhanwani.dev`,
+   `DEPLOY_PROTOCOL=https`, `APP_URL` to your frontend URL, and `DEPLOY_INGRESS_IP` to the ingress's
+   public IP (shown as the A record for bare custom domains).
 
 **Security note.** User sites run arbitrary code on subdomains of your app's domain. The refresh
 cookie is host-only, so it isn't sent to them. But a user site _can_ set cookies for

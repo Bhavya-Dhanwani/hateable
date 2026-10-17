@@ -41,7 +41,11 @@ spec:
                 port:
                   number: 80
 
-    - http:
+    # the hateable API, on the app's own host only (prod: hateable.bhavyadhanwani.dev). Host-less API
+    # rules would also match custom domains, so www.shop.com/api/auth/login would reach hateable's
+    # auth service instead of the user's site.
+    - host: 'localhost'
+      http:
         paths:
           - pathType: Prefix
             path: '/api/auth'
@@ -50,9 +54,6 @@ spec:
                 name: auth-service
                 port:
                   number: 80
-
-    - http:
-        paths:
           - pathType: Prefix
             path: '/api/projects'
             backend:
@@ -60,13 +61,21 @@ spec:
                 name: project-service
                 port:
                   number: 80
-
-    - http:
-        paths:
           - pathType: Prefix
             path: '/api/ai'
             backend:
               service:
                 name: ai-service
+                port:
+                  number: 80
+
+    # every other host: custom domains of deployments (projectService maps them to their site)
+    - http:
+        paths:
+          - pathType: Prefix
+            path: '/'
+            backend:
+              service:
+                name: project-service
                 port:
                   number: 80

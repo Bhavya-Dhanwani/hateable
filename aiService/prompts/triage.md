@@ -29,3 +29,7 @@ see to do this task correctly, e.g. the file being edited, the router you regist
 Keep it short and relevant (max 15); empty for a brand-new project.
 
 Give a one-sentence reason.
+
+Skills: also pick the skills (listed in the "skills" field) that whoever writes this code must follow,
+e.g. frontend-design + responsive-layout + accessibility for a landing page, react-patterns for stateful
+UI, nextjs-app-router for a Next.js project. Pick none for backend-only or config tasks. At most 4.

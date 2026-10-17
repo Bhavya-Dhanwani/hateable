@@ -32,6 +32,9 @@ spec:
               port: 3000
             initialDelaySeconds: 90
             timeoutSeconds: 10
+            # a hot reload (skaffold sync -> tsx restart) takes ~20s; two in a row must not get the
+            # container killed, which would restart it from the image and drop the synced code
+            failureThreshold: 6
           readinessProbe:
             httpGet:
               path: /api/health

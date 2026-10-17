@@ -13,6 +13,7 @@ import { deploymentServiceName, startDeployment } from '../services/deployment.s
 import { notFoundPage, wakingPage } from '../templates/deploy.templates.js';
 import DeploymentDao from '../dao/deployment.dao.js';
 import { SLUG_PATTERN } from '../utils/slugify.util.js';
+import { slugForHost } from '../services/domain.service.js';
 import env from '../config/env.config.js';
 import logger from '../config/logger.config.js';
 
@@ -26,6 +27,9 @@ const deployProxyMap: { [slug: string]: Function } = {};
 const requestStart = new WeakMap<IncomingMessage, number>();
 
 const deploymentDao = new DeploymentDao();
+
+// the hateable app's own host never needs a custom-domain lookup
+const APP_HOSTNAME = new URL(env.APP_URL).hostname;
 
 // when this replica started waking each deployment, to log how long the cold start took
 // ponytail: in-process, so with several replicas only the waking one logs the duration
@@ -222,35 +226,49 @@ async function handleDeployment(slug: string, req: Request, res: Response, next:
   return sendWaking(res, slug);
 }
 
+// <projectId>.preview.<domain> / <projectId>.workspace.<domain>, exactly (not any host containing the word)
+const PREVIEW_HOST = /^([a-f0-9]{24})\.(preview|workspace)\./;
+const IP_HOST = /^\d{1,3}(\.\d{1,3}){3}$/;
+
+/**
+ * A custom domain (www.shop.com) of a deployment; anything else that is not ours, such as the
+ * app's own host or an IP, goes on to the API routes.
+ */
+async function handleCustomDomain(
+  hostname: string,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const slug = await slugForHost(hostname);
+  if (!slug) return next();
+  return handleDeployment(slug, req, res, next);
+}
+
 function handleProxy(req: Request, res: Response, next: NextFunction) {
   const host = req.headers.host || '';
-
-  // deployments first: a slug may itself contain "preview" or "workspace"
   const hostname = host.split(':')[0].toLowerCase();
+
+  // deployments first: <slug>.<DEPLOY_DOMAIN>
   if (hostname.endsWith(`.${env.DEPLOY_DOMAIN}`)) {
     return handleDeployment(hostname.slice(0, -env.DEPLOY_DOMAIN.length - 1), req, res, next);
   }
 
-  if (!host.includes('preview') && !host.includes('workspace')) {
-    return next();
+  const preview = PREVIEW_HOST.exec(hostname);
+  if (!preview) {
+    // dotted hosts that are not IPs or the app itself may be a custom domain of a deployment
+    const ours = hostname === APP_HOSTNAME || IP_HOST.test(hostname) || !hostname.includes('.');
+    return ours ? next() : handleCustomDomain(hostname, req, res, next);
   }
 
-  const subDomains = host.split('.');
-
-  const uniqueId = subDomains[0];
-
-  if (!uniqueId) {
-    return res.status(400).json({ error: 'Invalid preview URL.' });
-  }
+  const [, uniqueId, kind] = preview;
 
   // Refresh the idle timer for this preview asynchronously
   void recordActivity(uniqueId);
 
-  if (host.includes('preview')) {
-    return handleProxyAgent(uniqueId)(req, res, next);
-  } else if (host.includes('workspace')) {
-    return handleProxyAgentWorkspace(uniqueId)(req, res, next);
-  }
+  return kind === 'preview'
+    ? handleProxyAgent(uniqueId)(req, res, next)
+    : handleProxyAgentWorkspace(uniqueId)(req, res, next);
 }
 
 export default handleProxy;

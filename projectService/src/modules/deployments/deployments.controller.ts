@@ -9,6 +9,12 @@ import Ok from '../../shared/responses/Ok.response.js';
 import Created from '../../shared/responses/Created.response.js';
 import NoContent from '../../shared/responses/NoContent.response.js';
 import slugify from '../../shared/utils/slugify.util.js';
+import { randomBytes } from 'node:crypto';
+import CustomDomain from '../../shared/models/customDomain.model.js';
+import Conflict from '../../shared/errors/Conflict.error.js';
+import { normalizeDomain } from '../../shared/utils/domain.util.js';
+import { checkDns, dnsInstructions, forgetHost } from '../../shared/services/domain.service.js';
+import { sealEnvVars, unsealEnvVars, validateEnvVars } from '../../shared/utils/envVars.util.js';
 import { snapshotPrefix, deletePrefix } from '../../shared/services/s3.service.js';
 import {
   claimDeploymentWake,
@@ -35,6 +41,9 @@ const currentUserId = (req: Request) => {
   const user = (req as Request & { user?: { userId?: string; _id?: string } }).user;
   return user?.userId || user?._id || '';
 };
+
+// how many custom domains one site may have
+const MAX_DOMAINS = 5;
 
 // class to handle one-click deployments of a project
 class DeploymentsController {
@@ -125,7 +134,9 @@ class DeploymentsController {
     if (!(await touchDeployment(slug))) {
       await claimDeploymentWake(slug);
     }
-    await startDeployment({ slug, projectType: project.projectType as string });
+    // a redeploy keeps the env vars set on the deployment
+    const withEnv = await this.deploymentDao.findWithEnvByProjectId(projectId);
+    await startDeployment({ slug, projectType: project.projectType as string, env: withEnv?.env });
     await recordDeployEvent(slug, 'info', `Deployed v${deployment!.version} (${copied} files)`);
 
     // returning the deployment with its public url
@@ -154,7 +165,180 @@ class DeploymentsController {
     await deleteAnalytics(deployment.slug);
     await deleteDeploymentLogs(deployment.slug);
 
+    // the custom domains stop pointing anywhere useful, free them for other projects
+    const domains = await CustomDomain.find({ slug: deployment.slug });
+    await CustomDomain.deleteMany({ slug: deployment.slug });
+    domains.forEach((d) => forgetHost(d.domain));
+
     return NoContent(res);
+  };
+
+  // function to shape a custom domain for the dashboard, with the DNS records to create
+  private presentDomain = (d: {
+    domain: string;
+    slug: string;
+    token: string;
+    verified: boolean;
+    verifiedAt?: Date | null;
+  }) => ({
+    domain: d.domain,
+    verified: d.verified,
+    verifiedAt: d.verifiedAt ?? null,
+    url: `${env.DEPLOY_PROTOCOL}://${d.domain}`,
+    records: dnsInstructions(d.domain, d.slug, d.token)
+  });
+
+  // function to load the deployment of a project the caller owns
+  private findOwnedDeployment = async (req: Request) => {
+    const project = await this.findOwnedProject(req);
+    const deployment = await this.deploymentDao.findByProjectId(project._id.toString());
+
+    if (!deployment) {
+      throw new NotFound('This project is not deployed');
+    }
+
+    return deployment;
+  };
+
+  // get the custom domains of a deployment
+  listDomains = async (req: Request, res: Response) => {
+    const deployment = await this.findOwnedDeployment(req);
+    const domains = await CustomDomain.find({ slug: deployment.slug }).sort({ createdAt: 1 });
+
+    return Ok(res, 'Domains fetched successfully', { domains: domains.map(this.presentDomain) });
+  };
+
+  // connect a custom domain: it stays pending until its TXT record is verified
+  addDomain = async (req: Request, res: Response) => {
+    const deployment = await this.findOwnedDeployment(req);
+
+    // normalizing what the user typed (a pasted URL works too)
+    const checked = normalizeDomain(req.body?.domain);
+    if ('error' in checked) {
+      throw new BadRequest(checked.error);
+    }
+
+    if ((await CustomDomain.countDocuments({ slug: deployment.slug })) >= MAX_DOMAINS) {
+      throw new BadRequest(`A site can have at most ${MAX_DOMAINS} custom domains`);
+    }
+
+    const existing = await CustomDomain.findOne({ domain: checked.domain });
+    if (existing) {
+      throw new Conflict(
+        existing.slug === deployment.slug
+          ? 'This domain is already connected to this site'
+          : 'This domain is connected to another site'
+      );
+    }
+
+    const domain = await CustomDomain.create({
+      domain: checked.domain,
+      slug: deployment.slug,
+      projectId: deployment.projectId,
+      userId: currentUserId(req),
+      token: randomBytes(16).toString('hex')
+    });
+
+    return Created(res, 'Domain added, create the DNS records to verify it', {
+      domain: this.presentDomain(domain)
+    });
+  };
+
+  // check the DNS of a custom domain; it starts serving the site once ownership is proven
+  verifyDomain = async (req: Request, res: Response) => {
+    const deployment = await this.findOwnedDeployment(req);
+    const domain = await CustomDomain.findOne({ domain: req.params.domain, slug: deployment.slug });
+
+    if (!domain) {
+      throw new NotFound('Domain not found on this site');
+    }
+
+    const dns = await checkDns(domain.domain, domain.slug, domain.token);
+
+    if (dns.ownership && !domain.verified) {
+      domain.verified = true;
+      domain.verifiedAt = new Date();
+      await domain.save();
+      forgetHost(domain.domain);
+      await recordDeployEvent(deployment.slug, 'info', `Custom domain ${domain.domain} connected`);
+    }
+
+    return Ok(res, domain.verified ? 'Domain verified' : 'TXT record not found yet', {
+      domain: this.presentDomain(domain),
+      dns
+    });
+  };
+
+  // disconnect a custom domain
+  removeDomain = async (req: Request, res: Response) => {
+    const deployment = await this.findOwnedDeployment(req);
+    const removed = await CustomDomain.findOneAndDelete({
+      domain: req.params.domain,
+      slug: deployment.slug
+    });
+
+    if (!removed) {
+      throw new NotFound('Domain not found on this site');
+    }
+
+    forgetHost(removed.domain);
+    await recordDeployEvent(deployment.slug, 'info', `Custom domain ${removed.domain} removed`);
+
+    return NoContent(res);
+  };
+
+  // get the environment variables of a deployment (owner only, decrypted)
+  getEnv = async (req: Request, res: Response) => {
+    // checking the project belongs to the user
+    const project = await this.findOwnedProject(req);
+
+    // finding the deployment with its encrypted env
+    const deployment = await this.deploymentDao.findWithEnvByProjectId(project._id.toString());
+
+    if (!deployment) {
+      throw new NotFound('This project is not deployed');
+    }
+
+    return Ok(res, 'Environment variables fetched successfully', {
+      vars: unsealEnvVars(deployment.env)
+    });
+  };
+
+  // replace the environment variables of a deployment; an awake site restarts to pick them up
+  updateEnv = async (req: Request, res: Response) => {
+    // checking the project belongs to the user
+    const project = await this.findOwnedProject(req);
+    const projectId = project._id.toString();
+
+    // validating names, sizes and reserved keys
+    const checked = validateEnvVars(req.body?.vars);
+    if ('error' in checked) {
+      throw new BadRequest(checked.error);
+    }
+
+    // saving them encrypted using the deployment dao
+    const deployment = await this.deploymentDao.updateEnv(projectId, sealEnvVars(checked.vars));
+
+    if (!deployment) {
+      throw new NotFound('This project is not deployed');
+    }
+
+    // env is read at process start, so a running site must restart; a sleeping one gets it on wake
+    const count = Object.keys(checked.vars).length;
+    const awake = await touchDeployment(deployment.slug);
+    if (awake) {
+      await startDeployment(deployment);
+    }
+    await recordDeployEvent(
+      deployment.slug,
+      'info',
+      `Environment variables updated (${count})${awake ? ', restarting the site' : ''}`
+    );
+
+    return Ok(res, awake ? 'Saved, the site is restarting' : 'Saved, used on the next visit', {
+      vars: checked.vars,
+      restarted: awake
+    });
   };
 
   // get the optimized logs of a deployment: app output (live or last run) + lifecycle events

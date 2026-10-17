@@ -15,9 +15,23 @@ class DeploymentDao {
     return await this.DeploymentModel.findOne({ projectId: projectId });
   }
 
-  // function to find a deployment by its subdomain
+  // function to find a deployment by its subdomain, with its encrypted env (to start its pod)
   async findBySlug(slug: string) {
-    return await this.DeploymentModel.findOne({ slug: slug });
+    return await this.DeploymentModel.findOne({ slug: slug }).select('+env');
+  }
+
+  // function to find the deployment of a project including its encrypted env
+  async findWithEnvByProjectId(projectId: string) {
+    return await this.DeploymentModel.findOne({ projectId: projectId }).select('+env');
+  }
+
+  // function to replace the encrypted env of a deployment
+  async updateEnv(projectId: string, sealedEnv: string) {
+    return await this.DeploymentModel.findOneAndUpdate(
+      { projectId: projectId },
+      { $set: { env: sealedEnv } },
+      { returnDocument: 'after' }
+    ).select('+env');
   }
 
   // function to create a deployment or bump the version of an existing one

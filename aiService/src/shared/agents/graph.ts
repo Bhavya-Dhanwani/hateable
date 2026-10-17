@@ -8,7 +8,7 @@ import { Annotation, END, START, Send, StateGraph } from '@langchain/langgraph';
 import { z } from 'zod';
 import env from '../config/env.config.js';
 import { ask } from './llm.js';
-import { prompt } from './prompts.js';
+import { listSkills, prompt, skillsText } from './prompts.js';
 import { checkInBrowser } from './browserQa.js';
 import { hasMcpServer } from '../services/mcp.service.js';
 import { describeResult, runCommand } from '../services/terminal.service.js';
@@ -44,6 +44,7 @@ const State = Annotation.Root({
   depth: Annotation<number>,
   owned: Annotation<string[]>, // files this agent is responsible for
   readFiles: Annotation<string[]>, // existing files this agent wants to see
+  skills: Annotation<string[]>, // skills (prompts/skills/*.md) this agent works and is reviewed by
   complexity: Annotation<'small' | 'medium' | 'large'>,
   plan: Annotation<string>,
   contracts: Annotation<string>,
@@ -77,6 +78,17 @@ const brief = (s: S) =>
     .filter(Boolean)
     .join('\n\n');
 
+// at most this many skills per agent: each one is a page of prompt
+const MAX_SKILLS = 4;
+
+// the chosen skills as a prompt section; the worker follows them and the reviewer scores against them
+const skillBlock = (s: S) => {
+  const text = s.skills?.length ? skillsText(s.skills) : '';
+  return (
+    text && `## Skills for this task (follow them; they are part of the quality bar)\n\n${text}`
+  );
+};
+
 const showFiles = (files: Files) =>
   Object.entries(files)
     .map(([p, c]) => `=== ${p} ===\n${c}`)
@@ -100,13 +112,20 @@ async function triage(s: S): Promise<Partial<S>> {
   if (++ctx.agents > env.MAX_AGENTS || s.depth >= env.MAX_DEPTH) {
     return { complexity: 'small', readFiles: [] };
   }
+  const available = listSkills();
   const r = await ask(
     z.object({
       complexity: z.enum(['small', 'medium', 'large']),
       reason: z.string(),
       readFiles: z
         .array(z.string())
-        .describe('existing project files you must see to do this task well (max 15)')
+        .describe('existing project files you must see to do this task well (max 15)'),
+      skills: z
+        .array(z.string())
+        .describe(
+          'skills to load if you end up writing the code yourself (max 4), only those this task needs:\n' +
+            available.map((k) => `- ${k.name}: ${k.description}`).join('\n')
+        )
     }),
     prompt('triage'),
     brief(s),
@@ -114,8 +133,10 @@ async function triage(s: S): Promise<Partial<S>> {
   );
   // planning happens once; below a plan, "large" means "split it"
   const complexity = r.complexity === 'large' && s.depth > 0 ? 'medium' : r.complexity;
-  log(s, `${complexity}: ${r.reason}`);
-  return { complexity, readFiles: r.readFiles.slice(0, 15) };
+  const known = new Set(available.map((k) => k.name));
+  const skills = (r.skills ?? []).filter((name) => known.has(name)).slice(0, MAX_SKILLS);
+  log(s, `${complexity}: ${r.reason}${skills.length ? ` (skills: ${skills.join(', ')})` : ''}`);
+  return { complexity, readFiles: r.readFiles.slice(0, 15), skills };
 }
 
 async function plan(s: S): Promise<Partial<S>> {
@@ -238,6 +259,7 @@ async function work(s: S): Promise<Partial<S>> {
     prompt('worker'),
     [
       brief(s),
+      skillBlock(s),
       Object.keys(existing).length &&
         `## Current content of existing files\n${showFiles(existing)}`,
       s.review &&
@@ -259,7 +281,9 @@ async function review(s: S): Promise<Partial<S>> {
   const r = await ask(
     z.object({ score: z.number().min(0).max(10), issues: z.array(z.string()) }),
     prompt('reviewer'),
-    `${brief(s)}\n\n## Code to review\n${showFiles(s.draft)}`,
+    [brief(s), skillBlock(s), `## Code to review\n${showFiles(s.draft)}`]
+      .filter(Boolean)
+      .join('\n\n'),
     `${s.role}:review#${s.round}`
   );
   log(s, `review ${r.score}/10`);

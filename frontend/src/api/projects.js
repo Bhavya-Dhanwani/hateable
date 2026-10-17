@@ -48,3 +48,28 @@ export const githubApi = {
       body: JSON.stringify({ repo })
     })
 };
+
+// deployment environment variables (stored encrypted; saving restarts an awake site)
+deploymentsApi.env = (id) => apiRequest(`/api/projects/${id}/deployment/env`).then((d) => d.vars);
+deploymentsApi.saveEnv = (id, vars) =>
+  apiRequest(`/api/projects/${id}/deployment/env`, {
+    method: 'PUT',
+    body: JSON.stringify({ vars })
+  });
+
+// custom domains of a deployment: pending until their TXT record verifies, then they serve the site
+deploymentsApi.domains = (id) =>
+  apiRequest(`/api/projects/${id}/deployment/domains`).then((d) => d.domains);
+deploymentsApi.addDomain = (id, domain) =>
+  apiRequest(`/api/projects/${id}/deployment/domains`, {
+    method: 'POST',
+    body: JSON.stringify({ domain })
+  }).then((d) => d.domain);
+deploymentsApi.verifyDomain = (id, domain) =>
+  apiRequest(`/api/projects/${id}/deployment/domains/${encodeURIComponent(domain)}/verify`, {
+    method: 'POST'
+  });
+deploymentsApi.removeDomain = (id, domain) =>
+  apiRequest(`/api/projects/${id}/deployment/domains/${encodeURIComponent(domain)}`, {
+    method: 'DELETE'
+  });

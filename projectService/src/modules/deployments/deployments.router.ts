@@ -48,6 +48,78 @@ router.delete(
 );
 
 /*
+    @route GET /api/projects/:projectId/deployment/domains
+    @desc List the custom domains of the deployment, with the DNS records to create
+    @access Private
+*/
+router.get(
+  '/:projectId/deployment/domains',
+  authMiddleware,
+  projectIdValidators,
+  catchAsync(deploymentsController.listDomains)
+);
+
+/*
+    @route POST /api/projects/:projectId/deployment/domains
+    @desc Connect a custom domain ({ domain }), pending until verified
+    @access Private
+*/
+router.post(
+  '/:projectId/deployment/domains',
+  authMiddleware,
+  projectIdValidators,
+  catchAsync(deploymentsController.addDomain)
+);
+
+/*
+    @route POST /api/projects/:projectId/deployment/domains/:domain/verify
+    @desc Check the domain's DNS; it serves the site once its TXT record is found
+    @access Private
+*/
+router.post(
+  '/:projectId/deployment/domains/:domain/verify',
+  authMiddleware,
+  projectIdValidators,
+  catchAsync(deploymentsController.verifyDomain)
+);
+
+/*
+    @route DELETE /api/projects/:projectId/deployment/domains/:domain
+    @desc Disconnect a custom domain
+    @access Private
+*/
+router.delete(
+  '/:projectId/deployment/domains/:domain',
+  authMiddleware,
+  projectIdValidators,
+  catchAsync(deploymentsController.removeDomain)
+);
+
+/*
+    @route GET /api/projects/:projectId/deployment/env
+    @desc Get the deployment's environment variables
+    @access Private
+*/
+router.get(
+  '/:projectId/deployment/env',
+  authMiddleware,
+  projectIdValidators,
+  catchAsync(deploymentsController.getEnv)
+);
+
+/*
+    @route PUT /api/projects/:projectId/deployment/env
+    @desc Replace the deployment's environment variables ({ vars: { NAME: value } })
+    @access Private
+*/
+router.put(
+  '/:projectId/deployment/env',
+  authMiddleware,
+  projectIdValidators,
+  catchAsync(deploymentsController.updateEnv)
+);
+
+/*
     @route GET /api/projects/:projectId/deployment/logs
     @desc Get the optimized logs of the deployment (app output + lifecycle events)
     @access Private
