@@ -1,0 +1,23 @@
+# Persistent volumes for the dev Mongo and S3. Deliberately NOT in skaffold.yaml: `skaffold dev`
+# deletes everything it deployed on exit (and recreates pods on config changes), which would wipe
+# accounts and projects. Apply once per cluster:
+#   kubectl apply -f k8s/dev-storage.yml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-data
+spec:
+  accessModes: ['ReadWriteOnce']
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: s3-data
+spec:
+  accessModes: ['ReadWriteOnce']
+  resources:
+    requests:
+      storage: 5Gi

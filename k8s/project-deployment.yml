@@ -1,66 +1,83 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name:  project-deployment
+  name: project-deployment
   labels:
     name: project-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app:  project
+      app: project
   template:
     metadata:
       labels:
-        app:  project
+        app: project
     spec:
-      serviceAccount:  resource-manager
+      serviceAccount: resource-manager
       containers:
-      - image:  project-image
-        name:  project-main
-        imagePullPolicy: IfNotPresent
-        resources:
-          requests:
-            cpu: "120m"
-            memory: "120M"
-          limits:
-            cpu: "250m"
-            memory: "250M"
-        livenessProbe:
-          httpGet:
-            path: /api/health
-            port: 3000
-          initialDelaySeconds: 90
-          timeoutSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /api/health
-            port: 3000
-          initialDelaySeconds: 30
-          timeoutSeconds: 10
-        env:
-        - name:  ACCESS_TOKEN_SECRET
-          valueFrom:
-            secretKeyRef:
-              name:  auth
-              key:  ACCESS_TOKEN_SECRET
-        - name:  MONGO_URI
-          valueFrom:
-            secretKeyRef:
-              name:  database
-              key:  PROJECT_DB
-        - name:  REDIS_URL
-          valueFrom:
-            secretKeyRef:
-              name:  redis
-              key:  REDIS_URL
-        - name:  BROKER_URL
-          valueFrom:
-            secretKeyRef:
-              name:  message-broker
-              key:  message-broker_url
-        - name:  PORT
-          value:  "3000"
-        ports:
-        - containerPort:  3000
-          name:  http
+        - image: project-image
+          name: project-main
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: '120m'
+              memory: '120M'
+            limits:
+              cpu: '250m'
+              memory: '250M'
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 90
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          env:
+            - name: ACCESS_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth
+                  key: ACCESS_TOKEN_SECRET
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: database
+                  key: PROJECT_DB
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redis
+                  key: REDIS_URL
+            - name: BROKER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: message-broker
+                  key: message-broker_url
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws
+                  key: AWS_SECRET_ACCESS_KEY
+            # deployments are served at <slug>.<DEPLOY_DOMAIN>, prod: hateable.bhavyadhanwani.dev + https
+            - name: DEPLOY_DOMAIN
+              value: 'hateable.localhost'
+            - name: DEPLOY_PROTOCOL
+              value: 'http'
+            - name: DEPLOY_IDLE_TTL_MS
+              value: '900000'
+            - name: PORT
+              value: '3000'
+          ports:
+            - containerPort: 3000
+              name: http

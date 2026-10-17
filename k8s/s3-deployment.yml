@@ -1,0 +1,48 @@
+# Dev-only S3 for the per-project sync containers (SeaweedFS; MinIO images are no longer on Docker Hub).
+# No identities configured, so any access key is accepted — dev only.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: s3-deployment
+  labels:
+    name: s3-deployment
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # RWO volume: old pod must release it first
+  selector:
+    matchLabels:
+      app: s3
+  template:
+    metadata:
+      labels:
+        app: s3
+    spec:
+      containers:
+        - image: chrislusf/seaweedfs:3.80
+          name: s3
+          imagePullPolicy: IfNotPresent
+          args:
+            ['server', '-dir=/data', '-s3', '-s3.port=8333', '-ip.bind=0.0.0.0', '-volume.max=10']
+          resources:
+            requests:
+              cpu: '100m'
+              memory: '256M'
+            limits:
+              cpu: '500m'
+              memory: '512M'
+          readinessProbe:
+            tcpSocket:
+              port: 8333
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          ports:
+            - containerPort: 8333
+              name: s3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: s3-data

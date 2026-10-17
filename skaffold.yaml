@@ -6,9 +6,8 @@ metadata:
 # ── Build ──────────────────────────────────────────
 build:
   local:
-    push: false        # build locally and don't push to any registry
+    push: false # build locally and don't push to any registry
   artifacts:
-
     - image: auth-image
       context: authService
       docker:
@@ -54,7 +53,7 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% next-image-js:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% next-image-js:latest']
 
     - image: next-image-ts
       context: boilerplates/nextjsboilerplatets
@@ -68,7 +67,7 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% next-image-ts:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% next-image-ts:latest']
 
     - image: node-image-js
       context: boilerplates/nodejsboilerplatejs
@@ -82,7 +81,7 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% node-image-js:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% node-image-js:latest']
 
     - image: node-image-ts
       context: boilerplates/nodejsboilerplatets
@@ -96,7 +95,7 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% node-image-ts:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% node-image-ts:latest']
 
     - image: react-image-js
       context: boilerplates/reactjsboilerplatejs
@@ -110,7 +109,7 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% react-image-js:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% react-image-js:latest']
 
     - image: react-image-ts
       context: boilerplates/reactjsboilerplatets
@@ -124,7 +123,7 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% react-image-ts:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% react-image-ts:latest']
 
     - image: mern-image-js-client
       context: boilerplates/mernboilerplatejs/client
@@ -138,7 +137,7 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% mern-image-js-client:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% mern-image-js-client:latest']
 
     - image: mern-image-js-server
       context: boilerplates/mernboilerplatejs/server
@@ -152,7 +151,7 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% mern-image-js-server:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% mern-image-js-server:latest']
 
     - image: mern-image-ts-client
       context: boilerplates/mernboilerplatets/client
@@ -166,7 +165,7 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% mern-image-ts-client:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% mern-image-ts-client:latest']
 
     - image: mern-image-ts-server
       context: boilerplates/mernboilerplatets/server
@@ -180,8 +179,7 @@ build:
             dest: /app
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% mern-image-ts-server:latest"]
-
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% mern-image-ts-server:latest']
 
     - image: express-image
       context: express-file-server
@@ -193,7 +191,7 @@ build:
             dest: /workspace
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% express-image:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% express-image:latest']
 
     - image: sync-image
       context: syncService
@@ -205,15 +203,20 @@ build:
             dest: /workspace
       hooks:
         after:
-          - command: ["cmd.exe", "/c", "docker tag %SKAFFOLD_IMAGE% sync-image:latest"]
+          - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% sync-image:latest']
 
 # ── Manifests ──────────────────────────────────────
 manifests:
+  # Prerequisite (once per cluster, kept out of skaffold so data survives): kubectl apply -f k8s/dev-storage.yml
   rawYaml:
     - k8s/secrets.yml
     - k8s/rbac.yml
     - k8s/redis-deployment.yml
     - k8s/redis-service.yml
+    - k8s/mongo-deployment.yml
+    - k8s/mongo-service.yml
+    - k8s/s3-deployment.yml
+    - k8s/s3-service.yml
     - k8s/auth-deployment.yml
     - k8s/auth-service.yml
     - k8s/project-deployment.yml
@@ -224,6 +227,13 @@ manifests:
 
 # ── Port Forwarding ────────────────────────────────
 portForward:
+  # Ingress on a dedicated port: on Windows, :80 is shared by Docker and the WSL relay and
+  # requests land on either at random. The frontend dev server proxies to this port.
+  - resourceType: service
+    resourceName: ingress-nginx-controller
+    namespace: ingress-nginx
+    port: 80
+    localPort: 8088
   - resourceType: service
     resourceName: auth-service
     port: 80

@@ -1,0 +1,12 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: s3-service
+spec:
+  selector:
+    app: s3
+  type: ClusterIP
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 8333

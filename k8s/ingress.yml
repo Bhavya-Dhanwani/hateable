@@ -7,55 +7,66 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
+    - host: '*.preview.localhost'
+      http:
+        paths:
+          - pathType: Prefix
+            path: '/'
+            backend:
+              service:
+                name: project-service
+                port:
+                  number: 80
 
-  - host: "*.preview.localhost"
-    http:
-      paths:
-      - pathType: Prefix
-        path: "/"
-        backend:
-          service:
-            name: project-service
-            port: 
-              number: 80
-  
-  - host: "*.workspace.localhost"
-    http:
-      paths:
-      - pathType: Prefix
-        path: "/"
-        backend:
-          service:
-            name: project-service
-            port: 
-              number: 80
+    # one-click deployments: <slug>.hateable.localhost (prod: *.hateable.bhavyadhanwani.dev, keep in sync with DEPLOY_DOMAIN)
+    - host: '*.hateable.localhost'
+      http:
+        paths:
+          - pathType: Prefix
+            path: '/'
+            backend:
+              service:
+                name: project-service
+                port:
+                  number: 80
 
-  - http:
-      paths:
-      - pathType: Prefix
-        path: "/api/auth"
-        backend:
-          service:
-            name: auth-service
-            port: 
-              number: 80
-  
-  - http:
-      paths:
-      - pathType: Prefix
-        path: "/api/projects"
-        backend:
-          service:
-            name: project-service
-            port: 
-              number: 80
-  
-  - http:
-      paths:
-      - pathType: Prefix
-        path: "/api/ai"
-        backend:
-          service:
-            name: ai-service
-            port: 
-              number: 80
+    - host: '*.workspace.localhost'
+      http:
+        paths:
+          - pathType: Prefix
+            path: '/'
+            backend:
+              service:
+                name: project-service
+                port:
+                  number: 80
+
+    - http:
+        paths:
+          - pathType: Prefix
+            path: '/api/auth'
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 80
+
+    - http:
+        paths:
+          - pathType: Prefix
+            path: '/api/projects'
+            backend:
+              service:
+                name: project-service
+                port:
+                  number: 80
+
+    - http:
+        paths:
+          - pathType: Prefix
+            path: '/api/ai'
+            backend:
+              service:
+                name: ai-service
+                port:
+                  number: 80

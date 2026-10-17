@@ -7,3 +7,4 @@ coverage/
 DS_Store
 .npm_cache
 secrets.yml
+.claude

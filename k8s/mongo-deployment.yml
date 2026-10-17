@@ -1,0 +1,50 @@
+# Dev-only MongoDB. Data lives on the PVC from k8s/dev-storage.yml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo-deployment
+  labels:
+    name: mongo-deployment
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # RWO volume: old pod must release it first
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - image: mongo:7
+          name: mongo
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: '100m'
+              memory: '256M'
+            limits:
+              cpu: '500m'
+              memory: '512M'
+          livenessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+          ports:
+            - containerPort: 27017
+              name: mongo
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mongo-data
