@@ -12,6 +12,8 @@ import Project from '../../shared/models/project.model.js';
 import NotFound from '../../shared/errors/NotFound.error.js';
 import Forbidden from '../../shared/errors/Forbidden.error.js';
 import { publishMessage } from '../../shared/services/broker.service.js';
+import { Writable } from 'node:stream';
+import { followPreviewLogs } from '../../shared/services/logs.service.js';
 
 const currentUserId = (req: Request) => {
   const user = (req as Request & { user?: { userId?: string; _id?: string } }).user;
@@ -152,6 +154,53 @@ class PodsController {
       project.status = 'failed';
       await project.save();
       throw error;
+    }
+  };
+
+  // stream the raw output of the preview's app containers (server-sent events, one line per event)
+  streamLogs = async (req: Request, res: Response) => {
+    const project = await Project.findById(req.params.projectId);
+    if (!project) {
+      throw new NotFound('Project not found');
+    }
+    if (project.userId !== currentUserId(req)) {
+      throw new Forbidden('You do not have permission to view these logs');
+    }
+
+    // set before flushing so the compression filter sees the event-stream type
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // ingress-nginx would otherwise hold the stream back
+    res.flushHeaders();
+
+    // chunks can end mid-line: send whole lines only
+    let partial = '';
+    const out = new Writable({
+      write(chunk, _encoding, done) {
+        const lines = (partial + chunk.toString()).split('\n');
+        partial = lines.pop() ?? '';
+        lines.forEach((line) => res.write(`data: ${JSON.stringify(line)}\n\n`));
+        done();
+      }
+    });
+
+    const keepAlive = setInterval(() => res.write(': ping\n\n'), 20_000);
+    let stop = () => {};
+    req.on('close', () => {
+      clearInterval(keepAlive);
+      stop();
+    });
+
+    try {
+      stop = await followPreviewLogs(
+        `nextjs-pod-${project._id}`,
+        project.projectType as string,
+        out
+      );
+    } catch {
+      res.write(`event: error\ndata: ${JSON.stringify('The project is not running')}\n\n`);
+      res.end();
     }
   };
 }

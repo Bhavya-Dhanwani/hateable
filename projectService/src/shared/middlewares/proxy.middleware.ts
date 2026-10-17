@@ -7,7 +7,8 @@ import {
   touchDeployment,
   claimDeploymentWake
 } from '../services/activity.service.js';
-import { recordHit, recordWake } from '../services/analytics.service.js';
+import { isPageView, recordHit, recordWake } from '../services/analytics.service.js';
+import { recordDeployEvent } from '../services/logs.service.js';
 import { deploymentServiceName, startDeployment } from '../services/deployment.service.js';
 import { notFoundPage, wakingPage } from '../templates/deploy.templates.js';
 import DeploymentDao from '../dao/deployment.dao.js';
@@ -25,6 +26,10 @@ const deployProxyMap: { [slug: string]: Function } = {};
 const requestStart = new WeakMap<IncomingMessage, number>();
 
 const deploymentDao = new DeploymentDao();
+
+// when this replica started waking each deployment, to log how long the cold start took
+// ponytail: in-process, so with several replicas only the waking one logs the duration
+const wakingSince = new Map<string, number>();
 
 // Clean up stale proxy instances when a preview is reaped
 onPreviewReaped((uniqueId) => {
@@ -145,7 +150,21 @@ function handleDeploymentProxy(slug: string) {
       // every answer from the site feeds the analytics dashboard
       proxyRes: (proxyRes, req) => {
         const startedAt = requestStart.get(req) ?? Date.now();
-        void recordHit(slug, req, proxyRes.statusCode || 0, Date.now() - startedAt);
+        const status = proxyRes.statusCode || 0;
+        void recordHit(slug, req, status, Date.now() - startedAt);
+
+        // the first answer after a wake: the cold start is over
+        const wokeAt = wakingSince.get(slug);
+        if (wokeAt) {
+          wakingSince.delete(slug);
+          const seconds = ((Date.now() - wokeAt) / 1000).toFixed(1);
+          void recordDeployEvent(slug, 'info', `Back online after a ${seconds}s cold start`);
+        }
+
+        // only failures are worth a log line, successful traffic is in the analytics
+        const line = `${req.method} ${(req.url || '/').split('?')[0]} -> ${status} in ${Date.now() - startedAt}ms`;
+        if (status >= 500) void recordDeployEvent(slug, 'error', line);
+        else if (status === 404 && isPageView(req)) void recordDeployEvent(slug, 'warn', line);
       },
 
       // the pod exists but the app is not listening yet: keep showing the loader
@@ -189,9 +208,15 @@ async function handleDeployment(slug: string, req: Request, res: Response, next:
 
   // only the visitor that wins the claim starts the pod, the rest just wait on the loader
   if (await claimDeploymentWake(slug)) {
+    wakingSince.set(slug, Date.now());
+    void recordDeployEvent(slug, 'info', 'A visitor arrived, waking the site up');
     startDeployment(deployment)
       .then(() => recordWake(slug))
-      .catch((error) => logger.error(error, `Failed to wake deployment ${slug}`));
+      .catch((error) => {
+        wakingSince.delete(slug);
+        logger.error(error, `Failed to wake deployment ${slug}`);
+        void recordDeployEvent(slug, 'error', `Failed to start: ${(error as Error).message}`);
+      });
   }
 
   return sendWaking(res, slug);

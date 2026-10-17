@@ -8,7 +8,7 @@
     "dev": "tsx watch server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "tsx src/shared/agents/keyPool.test.ts",
+    "test": "tsx src/shared/agents/keyPool.test.ts && tsx src/shared/services/image.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
@@ -30,6 +30,7 @@
   "dependencies": {
     "@langchain/core": "^1.2.9",
     "@langchain/langgraph": "^1.4.13",
+    "@langchain/mcp-adapters": "1.1.4",
     "@langchain/mistralai": "^1.2.0",
     "amqplib": "^2.0.1",
     "compression": "^1.8.0",
@@ -46,6 +47,7 @@
     "morgan": "^1.10.0",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
+    "replicate-mcp": "0.9.0",
     "zod": "^3.24.2"
   }
 }

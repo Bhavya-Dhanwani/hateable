@@ -11,7 +11,10 @@ const envConstants = {
   DEPLOY_IDLE_TTL_MS: 15 * 60 * 1000,
   S3_ENDPOINT: 'http://s3-service:9000',
   S3_BUCKET_NAME: 'hateable-bucket',
-  AWS_REGION: 'us-east-1'
+  AWS_REGION: 'us-east-1',
+  GITHUB_CLIENT_ID: '',
+  GITHUB_CLIENT_SECRET: '',
+  TOKEN_ENCRYPTION_KEY: 'dev_only_token_encryption_key_change_in_production'
 } as const;
 
 export default envConstants;

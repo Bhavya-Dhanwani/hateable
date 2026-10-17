@@ -16,12 +16,18 @@ import {
   touchDeployment
 } from '../../shared/services/activity.service.js';
 import {
+  deploymentPodName,
   deploymentUrl,
   snapshotPrefixOf,
   startDeployment,
   stopDeployment
 } from '../../shared/services/deployment.service.js';
 import { deleteAnalytics, getAnalytics } from '../../shared/services/analytics.service.js';
+import {
+  deleteDeploymentLogs,
+  getDeploymentLogs,
+  recordDeployEvent
+} from '../../shared/services/logs.service.js';
 import env from '../../shared/config/env.config.js';
 
 // function to read the user id the auth middleware put on the request
@@ -120,6 +126,7 @@ class DeploymentsController {
       await claimDeploymentWake(slug);
     }
     await startDeployment({ slug, projectType: project.projectType as string });
+    await recordDeployEvent(slug, 'info', `Deployed v${deployment!.version} (${copied} files)`);
 
     // returning the deployment with its public url
     const body = await this.present(deployment!.toObject());
@@ -145,8 +152,32 @@ class DeploymentsController {
     await stopDeployment(deployment.slug);
     await deletePrefix(snapshotPrefixOf(deployment.slug));
     await deleteAnalytics(deployment.slug);
+    await deleteDeploymentLogs(deployment.slug);
 
     return NoContent(res);
+  };
+
+  // get the optimized logs of a deployment: app output (live or last run) + lifecycle events
+  getLogs = async (req: Request, res: Response) => {
+    // checking the project belongs to the user
+    const project = await this.findOwnedProject(req);
+
+    // finding the deployment using the deployment dao
+    const deployment = await this.deploymentDao.findByProjectId(project._id.toString());
+
+    if (!deployment) {
+      throw new NotFound('This project is not deployed');
+    }
+
+    const awake = (await getDeploymentIdleRemaining(deployment.slug)) > 0;
+    const logs = await getDeploymentLogs(
+      deployment.slug,
+      deploymentPodName(deployment.slug),
+      deployment.projectType,
+      awake
+    );
+
+    return Ok(res, 'Logs fetched successfully', logs);
   };
 
   // get the visitor analytics of a deployment

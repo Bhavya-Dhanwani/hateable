@@ -15,7 +15,14 @@ const envConstants = {
   MAX_REVIEW_ROUNDS: 4,
   MAX_DEPTH: 4,
   MAX_AGENTS: 200,
-  AGENT_SYSTEM_V2: 'false'
+  AGENT_SYSTEM_V2: 'false',
+  PLAYWRIGHT_MCP_URL: '',
+  MAX_BROWSER_FIX_ROUNDS: 1,
+  UNSPLASH_ACCESS_KEY: '',
+  REPLICATE_API_TOKEN: '',
+  IMAGE_MODEL: 'black-forest-labs/flux-schnell',
+  MAX_IMAGES_PER_RUN: 8,
+  PROJECT_SERVICE_URL: 'http://project-service'
 } as const;
 
 export default envConstants;

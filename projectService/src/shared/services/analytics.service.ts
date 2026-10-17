@@ -38,7 +38,7 @@ function clientIp(req: IncomingMessage) {
 }
 
 // a navigation to a document, as opposed to the js, css and images it loads
-function isPageView(req: IncomingMessage) {
+export function isPageView(req: IncomingMessage) {
   if (req.method !== 'GET') return false;
   if (req.headers['sec-fetch-dest']) return req.headers['sec-fetch-dest'] === 'document';
   return (req.headers.accept || '').includes('text/html');

@@ -1,6 +1,7 @@
 // Importing modules
 import {
   CopyObjectCommand,
+  GetObjectCommand,
   DeleteObjectsCommand,
   ListObjectsV2Command,
   S3Client
@@ -79,4 +80,21 @@ export async function snapshotPrefix(source: string, destination: string) {
   }
 
   return copied;
+}
+
+// function to read every file under a prefix, as paths relative to the prefix + their bytes
+export async function readPrefix(prefix: string) {
+  const files: Array<{ path: string; body: Buffer }> = [];
+
+  for await (const keys of listKeyPages(prefix)) {
+    for (const key of keys) {
+      const object = await s3Client.send(
+        new GetObjectCommand({ Bucket: env.S3_BUCKET_NAME, Key: key })
+      );
+      const bytes = await object.Body?.transformToByteArray();
+      if (bytes) files.push({ path: key.slice(prefix.length), body: Buffer.from(bytes) });
+    }
+  }
+
+  return files;
 }

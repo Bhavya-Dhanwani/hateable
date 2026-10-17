@@ -22,5 +22,6 @@ router.post(
 );
 router.get('/:projectId', authMiddleware, catchAsync(podsController.getProject));
 router.post('/:projectId/launch', authMiddleware, catchAsync(podsController.relaunchPod));
+router.get('/:projectId/logs', authMiddleware, catchAsync(podsController.streamLogs));
 
 export default router;

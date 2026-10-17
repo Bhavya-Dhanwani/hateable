@@ -8,7 +8,16 @@ import { Annotation, END, START, Send, StateGraph } from '@langchain/langgraph';
 import { z } from 'zod';
 import env from '../config/env.config.js';
 import { ask } from './llm.js';
-import { PLANNER, REVIEWER, SPLITTER, TRIAGE, WORKER } from './prompts.js';
+import { prompt } from './prompts.js';
+import { checkInBrowser } from './browserQa.js';
+import { hasMcpServer } from '../services/mcp.service.js';
+import { describeResult, runCommand } from '../services/terminal.service.js';
+import {
+  applyImageTokens,
+  createImageResolver,
+  ImageAspects,
+  type ImageRequest
+} from '../services/image.service.js';
 
 type Files = Record<string, string>;
 type Subtask = { role: string; task: string; files: string[] };
@@ -22,6 +31,7 @@ type RunCtx = {
   agents: number;
   cancelled: boolean;
   emit: (e: AgentEvent) => void;
+  images: ReturnType<typeof createImageResolver>; // stock photos + generated images, shared by the tree
 };
 const runs = new Map<string, RunCtx>();
 
@@ -39,6 +49,8 @@ const State = Annotation.Root({
   contracts: Annotation<string>,
   subtasks: Annotation<Subtask[]>,
   draft: Annotation<Files>, // this agent's current code
+  images: Annotation<ImageRequest[]>, // images its code refers to with {{img:<id>}} tokens
+  commands: Annotation<Array<{ command: string; cwd?: string }>>, // shell commands to run after saving
   review: Annotation<{ score: number; issues: string[] }>,
   round: Annotation<number>,
   // merged up from every descendant
@@ -71,7 +83,12 @@ const showFiles = (files: Files) =>
     .join('\n\n');
 
 async function fileServer(ctx: RunCtx, route: string, init?: RequestInit) {
-  const res = await fetch(`${ctx.fileServerUrl}${route}`, init);
+  let res = await fetch(`${ctx.fileServerUrl}${route}`, init);
+  // 503 = the pod is still restoring the workspace from S3 (fresh pod): wait up to a minute
+  for (let i = 0; res.status === 503 && i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    res = await fetch(`${ctx.fileServerUrl}${route}`, init);
+  }
   if (!res.ok) throw new Error(`File server ${route} failed: ${res.status} ${await res.text()}`);
   return res.json();
 }
@@ -91,7 +108,7 @@ async function triage(s: S): Promise<Partial<S>> {
         .array(z.string())
         .describe('existing project files you must see to do this task well (max 15)')
     }),
-    TRIAGE,
+    prompt('triage'),
     brief(s),
     `${s.role}:triage`
   );
@@ -105,7 +122,7 @@ async function plan(s: S): Promise<Partial<S>> {
   log(s, 'planning architecture...');
   const r = await ask(
     z.object({ plan: z.string().describe('full markdown architecture plan') }),
-    PLANNER,
+    prompt('planner'),
     brief(s),
     `${s.role}:plan`
   );
@@ -122,7 +139,7 @@ async function split(s: S): Promise<Partial<S>> {
         .array(z.object({ role: z.string(), task: z.string(), files: z.array(z.string()) }))
         .max(8)
     }),
-    SPLITTER,
+    prompt('splitter'),
     [brief(s), s.plan && `## Architecture plan (now split by it)\n${s.plan}`]
       .filter(Boolean)
       .join('\n\n'),
@@ -190,9 +207,35 @@ async function work(s: S): Promise<Partial<S>> {
       files: z.array(
         z.object({ path: z.string(), content: z.string().describe('full file content') })
       ),
+      images: z
+        .array(
+          z.object({
+            id: z.string().describe('token name used in the code as {{img:<id>}}, e.g. hero'),
+            kind: z.enum(['photo', 'generated']),
+            description: z
+              .string()
+              .describe('photo: short stock search query; generated: detailed image prompt'),
+            aspect: z.enum(ImageAspects),
+            path: z
+              .string()
+              .optional()
+              .describe('generated only: file to save it as, e.g. public/images/logo.webp')
+          })
+        )
+        .describe('every image referenced by an {{img:<id>}} token in your files; [] if none'),
+      commands: z
+        .array(
+          z.object({
+            command: z.string().describe('e.g. npm install zod'),
+            cwd: z.string().optional().describe('folder to run in, e.g. client or server for MERN')
+          })
+        )
+        .describe(
+          'shell commands to run after your files are saved, e.g. installing new deps; [] if none'
+        ),
       notes: z.string()
     }),
-    WORKER,
+    prompt('worker'),
     [
       brief(s),
       Object.keys(existing).length &&
@@ -206,6 +249,8 @@ async function work(s: S): Promise<Partial<S>> {
   );
   return {
     draft: Object.fromEntries(r.files.map((f) => [f.path.replace(/^\/+/, ''), f.content])),
+    images: r.images ?? [],
+    commands: r.commands ?? [],
     round
   };
 }
@@ -213,7 +258,7 @@ async function work(s: S): Promise<Partial<S>> {
 async function review(s: S): Promise<Partial<S>> {
   const r = await ask(
     z.object({ score: z.number().min(0).max(10), issues: z.array(z.string()) }),
-    REVIEWER,
+    prompt('reviewer'),
     `${brief(s)}\n\n## Code to review\n${showFiles(s.draft)}`,
     `${s.role}:review#${s.round}`
   );
@@ -227,19 +272,49 @@ const afterReview = (s: S) =>
 // write straight to the project's file server (it validates paths) as soon as this agent is done
 async function save(s: S): Promise<Partial<S>> {
   const ctx = ctxOf(s);
-  const n = Object.keys(s.draft).length;
-  if (n) {
+
+  // turning {{img:<id>}} tokens into real URLs; generated images become files of their own
+  const resolved = s.images?.length ? await ctx.images.resolve(s.images) : {};
+  const code: Files = Object.fromEntries(
+    Object.entries(s.draft).map(([p, c]) => [p, applyImageTokens(c, resolved)])
+  );
+  const imageFiles: Files = Object.fromEntries(
+    Object.values(resolved).flatMap((img) => (img.file ? [[img.file.path, img.file.dataUrl]] : []))
+  );
+  if (Object.keys(resolved).length) {
+    log(s, `added ${Object.keys(resolved).length} image(s)`);
+  }
+
+  const n = Object.keys(code).length;
+  const payload = { ...code, ...imageFiles };
+  if (Object.keys(payload).length) {
     await fileServer(ctx, '/files', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(s.draft)
+      body: JSON.stringify(payload)
     });
-    Object.keys(s.draft).forEach((f) => ctx.tree.add(f));
+    Object.keys(payload).forEach((f) => ctx.tree.add(f));
   }
   log(s, `saved ${n} file(s), final score ${s.review.score}/10`);
+
+  // running what the agent asked for (installing the deps its code imports), in order
+  const failed: string[] = [];
+  for (const { command, cwd } of s.commands ?? []) {
+    log(s, `$ ${command}${cwd ? `  (in ${cwd})` : ''}`);
+    try {
+      const r = await runCommand(ctx.fileServerUrl, command, cwd);
+      log(s, describeResult(command, r));
+      if (r.exitCode !== 0) failed.push(describeResult(command, r));
+    } catch (err) {
+      failed.push(`$ ${command} -> ${(err as Error).message}`);
+    }
+  }
   return {
-    files: s.draft,
-    reports: [`${s.path}: ${s.review.score}/10 after ${s.round} round(s), ${n} file(s)`]
+    files: { ...code, ...Object.fromEntries(Object.keys(imageFiles).map((f) => [f, '(image)'])) },
+    reports: [
+      `${s.path}: ${s.review.score}/10 after ${s.round} round(s), ${n} file(s)`,
+      ...failed.map((f) => `${s.path}: command failed: ${f}`)
+    ]
   };
 }
 
@@ -270,6 +345,7 @@ export async function runAgents(opts: {
   task: string;
   history: string; // recent conversation, for follow-up requests
   fileServerUrl: string;
+  previewUrl?: string; // in-cluster preview origin; enables the browser check when Playwright MCP is set up
   emit: (e: AgentEvent) => void;
   signal?: AbortSignal;
 }): Promise<{ files: string[]; reports: string[] }> {
@@ -279,7 +355,8 @@ export async function runAgents(opts: {
     tree: new Set(),
     agents: 0,
     cancelled: false,
-    emit: opts.emit
+    emit: opts.emit,
+    images: createImageResolver((message) => opts.emit({ path: 'Images', depth: 0, message }))
   };
   runs.set(runId, ctx);
   opts.signal?.addEventListener('abort', () => (ctx.cancelled = true));
@@ -302,8 +379,60 @@ export async function runAgents(opts: {
       { runId, task: opts.task, role: 'Boss', path: 'Boss', context, depth: 0, owned: [] },
       { runName: 'Boss', recursionLimit: 100 }
     );
-    return { files: Object.keys(out.files), reports: out.reports };
+    const files = { ...out.files };
+    const reports = [...out.reports];
+
+    // open the result in a real browser; hand anything broken to one more agent, then re-check
+    if (opts.previewUrl && hasMcpServer('playwright') && Object.keys(files).length) {
+      const qa = (message: string) => opts.emit({ path: 'Browser QA', depth: 0, message });
+
+      for (let round = 0; round <= env.MAX_BROWSER_FIX_ROUNDS; round++) {
+        let report;
+        try {
+          qa(round ? 're-checking the preview...' : 'opening the preview in Chromium...');
+          report = await checkInBrowser(opts.previewUrl, opts.task, Object.keys(files), {
+            fileServerUrl: opts.fileServerUrl,
+            onRun: qa
+          });
+        } catch (err) {
+          // QA is a bonus: a browser or MCP failure must never fail the user's run
+          qa(`browser check skipped: ${(err as Error).message.slice(0, 120)}`);
+          break;
+        }
+
+        qa(report.ok ? `looks good: ${report.summary}` : `found ${report.issues.length} issue(s)`);
+        reports.push(
+          `Browser QA: ${report.ok ? 'passed' : `${report.issues.length} issue(s)`}, ${report.summary}`
+        );
+        if (report.ok || round === env.MAX_BROWSER_FIX_ROUNDS) break;
+
+        const fix = await graph.invoke(
+          {
+            runId,
+            task: [
+              'A QA engineer opened the app in a real browser after your team finished and found these problems.',
+              'Fix every one of them:',
+              ...report.issues.map((i) => `- ${i}`)
+            ].join('\n'),
+            role: 'Browser Fixer',
+            path: 'Boss > Browser Fixer',
+            context: [
+              `## Original request\n${opts.task}`,
+              `## Current project files\n${[...ctx.tree].join('\n')}`
+            ].join('\n\n'),
+            depth: 1, // a focused fix: it may split, but never re-plan the whole app
+            owned: []
+          },
+          { runName: 'Browser Fixer', recursionLimit: 100 }
+        );
+        Object.assign(files, fix.files);
+        reports.push(...fix.reports);
+      }
+    }
+
+    return { files: Object.keys(files), reports };
   } finally {
     runs.delete(runId);
+    await ctx.images.close();
   }
 }

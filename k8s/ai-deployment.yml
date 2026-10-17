@@ -18,13 +18,14 @@ spec:
         - image: ai-image
           name: ai-main
           imagePullPolicy: IfNotPresent
+          # tsx watch + LangGraph + the MCP client idle near 250M; agent runs hold many files in memory
           resources:
             requests:
               cpu: '120m'
-              memory: '120M'
+              memory: '256Mi'
             limits:
-              cpu: '250m'
-              memory: '250M'
+              cpu: '500m'
+              memory: '768Mi'
           livenessProbe:
             httpGet:
               path: /api/health
@@ -69,6 +70,22 @@ spec:
                   key: MISTRAL_API_KEYS
             - name: AGENT_SYSTEM_V2
               value: 'true'
+            # browser QA through Playwright MCP (k8s/playwright-mcp-*.yml), remove to disable
+            - name: PLAYWRIGHT_MCP_URL
+              value: 'http://playwright-mcp-service:8931/mcp'
+            # images for generated sites; both optional, missing keys fall back to placeholders
+            - name: UNSPLASH_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai
+                  key: UNSPLASH_ACCESS_KEY
+                  optional: true
+            - name: REPLICATE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ai
+                  key: REPLICATE_API_TOKEN
+                  optional: true
             - name: PORT
               value: '5000'
           ports:

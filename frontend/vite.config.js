@@ -10,7 +10,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': { target: INGRESS, changeOrigin: false },
+      // ws: the workspace terminal is a WebSocket on /api/projects/:id/terminal
+      '/api': { target: INGRESS, changeOrigin: false, ws: true },
       // /runtime/<projectId>/file-tree -> <projectId>.workspace.localhost/file-tree (pod file server)
       '/runtime': {
         target: INGRESS,

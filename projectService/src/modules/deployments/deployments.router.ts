@@ -48,6 +48,18 @@ router.delete(
 );
 
 /*
+    @route GET /api/projects/:projectId/deployment/logs
+    @desc Get the optimized logs of the deployment (app output + lifecycle events)
+    @access Private
+*/
+router.get(
+  '/:projectId/deployment/logs',
+  authMiddleware,
+  projectIdValidators,
+  catchAsync(deploymentsController.getLogs)
+);
+
+/*
     @route GET /api/projects/:projectId/deployment/analytics?days=14
     @desc Get the visitor analytics of the deployment
     @access Private

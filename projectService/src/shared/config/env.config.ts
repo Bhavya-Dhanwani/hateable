@@ -30,7 +30,14 @@ const envSchema = z.object({
   S3_BUCKET_NAME: z.string().default(envConstants.S3_BUCKET_NAME),
   AWS_REGION: z.string().default(envConstants.AWS_REGION),
   AWS_ACCESS_KEY_ID: z.string().default(''),
-  AWS_SECRET_ACCESS_KEY: z.string().default('')
+  AWS_SECRET_ACCESS_KEY: z.string().default(''),
+
+  // GitHub OAuth App (github.com/settings/developers), callback: <APP_URL>/api/projects/github/callback
+  GITHUB_CLIENT_ID: z.string().default(envConstants.GITHUB_CLIENT_ID),
+  GITHUB_CLIENT_SECRET: z.string().default(envConstants.GITHUB_CLIENT_SECRET),
+
+  // encrypts stored third-party tokens (GitHub) at rest
+  TOKEN_ENCRYPTION_KEY: z.string().default(envConstants.TOKEN_ENCRYPTION_KEY)
 });
 
 // parsing and validating environment variables

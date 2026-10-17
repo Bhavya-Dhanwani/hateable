@@ -1,32 +1,31 @@
-import { getAccessToken, refreshAccessToken } from './client.js';
+import { apiRequest, getAccessToken, refreshAccessToken } from './client.js';
 
 /**
- * Streams one agent turn from aiService (POST /api/ai/chat, SSE).
- * Events: title {conversationId,title} · token {text} · tool_call {toolCalls}
- *         tool_response {toolCallId,name,content} · complete · error {message}
+ * Reads a server-sent event stream from our API (with the access token and one refresh on 401),
+ * calling onEvent(type, payload) for every event until the stream ends or `signal` aborts.
  */
-export async function streamChat({ projectId, conversationId, message, signal, onEvent }) {
-  const post = () =>
-    fetch('/api/ai/chat', {
-      method: 'POST',
+export async function streamEvents(path, { method = 'GET', body, signal, onEvent }) {
+  const send = () =>
+    fetch(path, {
+      method,
       credentials: 'include',
       signal,
       headers: {
-        'Content-Type': 'application/json',
         Accept: 'text/event-stream',
+        ...(body && { 'Content-Type': 'application/json' }),
         ...(getAccessToken() && { Authorization: `Bearer ${getAccessToken()}` })
       },
-      body: JSON.stringify({ projectId, conversationId, message })
+      body: body && JSON.stringify(body)
     });
 
-  let response = await post();
+  let response = await send();
   if (response.status === 401) {
     await refreshAccessToken();
-    response = await post();
+    response = await send();
   }
   if (!response.ok || !response.body) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.message || `AI service error (${response.status})`);
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.message || `Request failed (${response.status})`);
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -52,8 +51,28 @@ export async function streamChat({ projectId, conversationId, message, signal, o
       } catch {
         continue;
       }
-      if (type === 'error') throw new Error(payload.message);
+      if (type === 'error') throw new Error(payload?.message ?? payload);
       onEvent(type, payload);
     }
   }
 }
+
+/**
+ * Streams one agent turn from aiService (POST /api/ai/chat, SSE).
+ * Events: title {conversationId,title} · token {text} · tool_call {toolCalls}
+ *         tool_response {toolCallId,name,content} · agent {path,depth,message} · complete · error {message}
+ */
+export const streamChat = ({ projectId, conversationId, message, signal, onEvent }) =>
+  streamEvents('/api/ai/chat', {
+    method: 'POST',
+    body: { projectId, conversationId, message },
+    signal,
+    onEvent
+  });
+
+// the site AI: answers questions about a deployed site from its logs and analytics
+export const askSiteAi = (projectId, question, history = []) =>
+  apiRequest('/api/ai/insights', {
+    method: 'POST',
+    body: JSON.stringify({ projectId, question, history })
+  });

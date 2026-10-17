@@ -2,6 +2,8 @@ import { redis, redisSubscriber } from './redis.service.js';
 import { deletePod, deleteService } from './k8s.service.js';
 import Project from '../models/project.model.js';
 import env from '../config/env.config.js';
+import Deployment from '../models/deployment.model.js';
+import { recordDeployEvent, snapshotDeploymentLogs } from './logs.service.js';
 
 /**
  * Idle preview reaper.
@@ -149,6 +151,17 @@ async function sleepDeployment(slug: string) {
     }
 
     console.log(`[idle-reaper] deployment ${slug} is idle, putting it to sleep`);
+
+    // the pod's logs die with it: keep the last run for the owner's log view
+    const deployment = await Deployment.findOne({ slug });
+    if (deployment) {
+      await snapshotDeploymentLogs(slug, `deploy-pod-${slug}`, deployment.projectType);
+    }
+    await recordDeployEvent(
+      slug,
+      'info',
+      `Went to sleep after ${Math.round(env.DEPLOY_IDLE_TTL_MS / 60000)} minutes without visitors`
+    );
 
     await deleteService(`deploy-service-${slug}`);
     await deletePod(`deploy-pod-${slug}`);

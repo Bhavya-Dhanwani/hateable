@@ -29,3 +29,22 @@ export const deploymentsApi = {
   remove: (id) => apiRequest(`/api/projects/${id}/deployment`, { method: 'DELETE' }),
   analytics: (id, days = 14) => apiRequest(`/api/projects/${id}/deployment/analytics?days=${days}`)
 };
+
+// optimized deployment logs: { source: live|last-run|none, app: LogLine[], events }
+deploymentsApi.logs = (id) => apiRequest(`/api/projects/${id}/deployment/logs`);
+
+// GitHub: connect once per user, then push any project to a repo in one click
+export const githubApi = {
+  status: () => apiRequest('/api/projects/github/status'),
+  connectUrl: (returnTo) =>
+    apiRequest(`/api/projects/github/connect?returnTo=${encodeURIComponent(returnTo)}`).then(
+      (data) => data.url
+    ),
+  disconnect: () => apiRequest('/api/projects/github', { method: 'DELETE' }),
+  link: (id) => apiRequest(`/api/projects/${id}/github`),
+  push: (id, repo) =>
+    apiRequest(`/api/projects/${id}/github/push`, {
+      method: 'POST',
+      body: JSON.stringify({ repo })
+    })
+};

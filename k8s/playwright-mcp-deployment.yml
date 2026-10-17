@@ -1,0 +1,79 @@
+# Playwright MCP: a headless Chromium the AI agents drive over MCP (streamable HTTP on :8931/mcp)
+# to open a project's preview, read the page and its console errors, and click through it.
+# Every MCP session gets its own isolated browser context (no --shared-browser-context).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playwright-mcp-deployment
+  labels:
+    name: playwright-mcp-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: playwright-mcp
+  template:
+    metadata:
+      labels:
+        app: playwright-mcp
+    spec:
+      containers:
+        - image: mcr.microsoft.com/playwright/mcp:v0.0.83
+          name: playwright-mcp
+          imagePullPolicy: IfNotPresent
+          command: ['node', '/app/cli.js']
+          args:
+            - --headless
+            - --browser=chromium
+            - --no-sandbox # the container is the sandbox; Chromium's needs privileges pods don't get
+            - --isolated
+            - --host=0.0.0.0
+            - --port=8931
+            # only answer requests addressed to the in-cluster service name
+            - --allowed-hosts=playwright-mcp-service:8931
+            - --viewport-size=1280x800
+            # defence in depth only; the NetworkPolicy below is the real boundary
+            - --blocked-origins=http://mongo-service:27017;http://redis-service:6379;http://s3-service:9000;http://auth-service;http://project-service;http://ai-service
+          resources:
+            requests:
+              cpu: '250m'
+              memory: '512Mi'
+            limits:
+              cpu: '1000m'
+              memory: '1536Mi'
+          readinessProbe:
+            tcpSocket:
+              port: 8931
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          ports:
+            - containerPort: 8931
+              name: mcp
+
+---
+# The browser loads code the AI just wrote, so it may only reach project preview pods (and DNS),
+# never mongo, redis, the auth/project/ai services or the internet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: playwright-mcp-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: playwright-mcp
+  policyTypes: ['Egress']
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              hateable/role: preview
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

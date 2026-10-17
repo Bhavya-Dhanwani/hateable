@@ -11,6 +11,9 @@ import { CodeEditorPane } from '../components/workspace/CodeEditorPane.jsx';
 import { FileExplorer } from '../components/workspace/FileExplorer.jsx';
 import { PreviewPane } from '../components/workspace/PreviewPane.jsx';
 import { DeployButton } from '../components/workspace/DeployButton.jsx';
+import { GitHubButton } from '../components/workspace/GitHubButton.jsx';
+import { LogsPane } from '../components/workspace/LogsPane.jsx';
+import { TerminalPane } from '../components/workspace/TerminalPane.jsx';
 import { withIngressPort } from '../utils/ingressUrl.js';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -46,6 +49,7 @@ export function WorkspacePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [mode, setMode] = useState('preview');
   const [previewKey, setPreviewKey] = useState(0);
+  const [panel, setPanel] = useState(null); // bottom panel: 'terminal' | 'logs' | null
 
   // Make sure the pod is up: relaunch stopped/failed projects (projectService reaps idle ones).
   useEffect(() => {
@@ -276,35 +280,63 @@ export function WorkspacePage() {
               <span className="truncate">Files unavailable</span>
             </button>
           )}
+          {[
+            ['terminal', 'Terminal'],
+            ['logs', 'Logs']
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={panel === id}
+              onClick={() => setPanel((p) => (p === id ? null : id))}
+              className={`hidden h-8 rounded-full px-3 text-xs sm:block ${
+                panel === id ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <GitHubButton projectId={projectId} projectName={project.projectName} />
           <DeployButton projectId={projectId} />
         </div>
       </header>
 
       <div className="workspace-grid h-[calc(100svh-48px)]">
-        <div className="min-h-0 min-w-0">
-          {mode === 'code' ? (
-            <div className="workspace-code-grid h-full">
-              <FileExplorer
-                runtimeId={projectId}
-                filePaths={filePaths}
-                activePath={activePath}
-                onOpen={openFile}
-                onRefresh={refreshFiles}
-                onRelocate={relocateOpenPaths}
-                onRemove={removeOpenPaths}
-              />
-              <CodeEditorPane
-                tabs={tabs}
-                activePath={activePath}
-                onSelect={setActivePath}
-                onClose={closeFile}
-                onChange={changeFile}
-                onSave={saveFile}
-                isSaving={isSaving}
-              />
+        <div className="flex min-h-0 min-w-0 flex-col">
+          <div className="min-h-0 flex-1">
+            {mode === 'code' ? (
+              <div className="workspace-code-grid h-full">
+                <FileExplorer
+                  runtimeId={projectId}
+                  filePaths={filePaths}
+                  activePath={activePath}
+                  onOpen={openFile}
+                  onRefresh={refreshFiles}
+                  onRelocate={relocateOpenPaths}
+                  onRemove={removeOpenPaths}
+                />
+                <CodeEditorPane
+                  tabs={tabs}
+                  activePath={activePath}
+                  onSelect={setActivePath}
+                  onClose={closeFile}
+                  onChange={changeFile}
+                  onSave={saveFile}
+                  isSaving={isSaving}
+                />
+              </div>
+            ) : (
+              <PreviewPane key={previewKey} previewUrl={withIngressPort(project.previewURL)} />
+            )}
+          </div>
+          {panel && (
+            <div className="h-72 shrink-0 border-t border-line">
+              {panel === 'terminal' ? (
+                <TerminalPane projectId={projectId} />
+              ) : (
+                <LogsPane projectId={projectId} />
+              )}
             </div>
-          ) : (
-            <PreviewPane key={previewKey} previewUrl={withIngressPort(project.previewURL)} />
           )}
         </div>
         <ChatPanel

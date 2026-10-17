@@ -1,0 +1,4 @@
+# skaffold mis-splits CRLF manifests at blank lines (a document silently loses its second half),
+# so keep Kubernetes YAML LF on disk even on Windows checkouts
+k8s/*.yml text eol=lf
+skaffold.yaml text eol=lf

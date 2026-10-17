@@ -40,6 +40,9 @@ build:
             dest: /app
           - src: 'src/**/*.ts'
             dest: /app
+          # agent system prompts: edit aiService/prompts/*.md, the next run picks them up
+          - src: 'prompts/**/*.md'
+            dest: /app
 
     - image: next-image-js
       context: boilerplates/nextjsboilerplatejs
@@ -183,24 +186,20 @@ build:
 
     - image: express-image
       context: express-file-server
+      # no sync: skaffold never deploys this image itself (projectService creates the pods),
+      # so a sync has no container to copy into; a rebuild + :latest tag is what reaches new pods
       docker:
         dockerfile: dockerfile
-      sync:
-        manual:
-          - src: 'src/**/*.ts'
-            dest: /workspace
       hooks:
         after:
           - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% express-image:latest']
 
     - image: sync-image
       context: syncService
+      # no sync: skaffold never deploys this image itself (projectService creates the pods),
+      # so a sync has no container to copy into; a rebuild + :latest tag is what reaches new pods
       docker:
         dockerfile: Dockerfile
-      sync:
-        manual:
-          - src: 'src/**/*.ts'
-            dest: /workspace
       hooks:
         after:
           - command: ['cmd.exe', '/c', 'docker tag %SKAFFOLD_IMAGE% sync-image:latest']
@@ -223,6 +222,8 @@ manifests:
     - k8s/project-service.yml
     - k8s/ai-deployment.yml
     - k8s/ai-service.yml
+    - k8s/playwright-mcp-deployment.yml
+    - k8s/playwright-mcp-service.yml
     - k8s/ingress.yml
 
 # ── Port Forwarding ────────────────────────────────

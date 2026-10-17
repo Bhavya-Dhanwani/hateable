@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { deploymentsApi } from '../api/projects.js';
 import { LoadingScreen } from '../components/LoadingScreen.jsx';
+import { DeploymentLogs } from '../components/deployment/DeploymentLogs.jsx';
+import { SiteAssistant } from '../components/deployment/SiteAssistant.jsx';
 import { withIngressPort } from '../utils/ingressUrl.js';
 
 const RANGES = [7, 14, 30];
@@ -247,6 +249,14 @@ export function AnalyticsPage() {
           <List title="Referrers" rows={analytics.topReferrers} empty="No referrers yet" />
           <List title="Browsers" rows={fromCounts(analytics.browsers)} empty="No visitors yet" />
           <List title="Devices" rows={fromCounts(analytics.devices)} empty="No visitors yet" />
+        </div>
+
+        <div className="mt-14">
+          <DeploymentLogs projectId={projectId} />
+        </div>
+
+        <div className="mt-14">
+          <SiteAssistant projectId={projectId} />
         </div>
 
         <p className="mt-14 text-xs text-white/25 tabular-nums">

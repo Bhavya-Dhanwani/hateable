@@ -5,6 +5,7 @@ import env from '../../shared/config/env.config.js';
 import logger from '../../shared/config/logger.config.js';
 import { getStream } from '../../shared/services/ai.service.js';
 import { runAgents } from '../../shared/agents/graph.js';
+import { callProjectService } from '../../shared/services/projectService.service.js';
 import ProjectDao from '../../shared/dao/project.dao.js';
 import ConversationDao from '../../shared/dao/conversation.dao.js';
 import {
@@ -58,7 +59,8 @@ class ChatController {
 
     // 1. Resolve project
     const project = await resolveProject(projectId, this.projectDao);
-    let fileServerUrl = `http://${project.serviceName}:8000/api`;
+    // the pod file server mounts its routes at the root (express-file-server/src/app/app.ts)
+    let fileServerUrl = `http://${project.serviceName}:8000`;
 
     if (
       env.NODE_ENV === 'development' &&
@@ -156,10 +158,38 @@ class ChatController {
           .map((m) => `${m.role}: ${m.content}`)
           .join('\n');
 
+        // one pull before every run: edits made on GitHub land in the workspace before agents read it
+        try {
+          const pulled = await callProjectService<{
+            linked: boolean;
+            written: number;
+            deleted: number;
+          }>(req.headers.authorization || '', `/${projectId}/github/pull`, { method: 'POST' });
+          if (pulled.linked) {
+            send('agent', {
+              path: 'GitHub',
+              depth: 0,
+              message:
+                pulled.written || pulled.deleted
+                  ? `pulled ${pulled.written} changed and ${pulled.deleted} deleted file(s)`
+                  : 'already up to date'
+            });
+          }
+        } catch (err) {
+          // GitHub being unreachable must not block the user's request
+          send('agent', {
+            path: 'GitHub',
+            depth: 0,
+            message: `pull skipped: ${(err as Error).message}`
+          });
+        }
+
         const result = await runAgents({
           task: message,
           history: recent,
           fileServerUrl,
+          // the browser check opens the same preview the user sees, from inside the cluster
+          previewUrl: project.serviceName ? `http://${project.serviceName}` : undefined,
           signal: abort.signal,
           emit: (e) => send('agent', e)
         });

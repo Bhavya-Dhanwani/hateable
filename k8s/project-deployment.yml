@@ -76,6 +76,26 @@ spec:
               value: 'http'
             - name: DEPLOY_IDLE_TTL_MS
               value: '900000'
+            # GitHub connect: an OAuth App's credentials + the key stored tokens are encrypted with
+            # (all optional; without them the GitHub button explains what is missing)
+            - name: GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github
+                  key: GITHUB_CLIENT_ID
+                  optional: true
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: github
+                  key: GITHUB_CLIENT_SECRET
+                  optional: true
+            - name: TOKEN_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: github
+                  key: TOKEN_ENCRYPTION_KEY
+                  optional: true
             - name: PORT
               value: '3000'
           ports:

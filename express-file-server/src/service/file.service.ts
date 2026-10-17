@@ -1,7 +1,7 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import { IGNORED_DIRS, IGNORED_FILES, WORK_FOLDER } from "../config/env.js";
-import { HttpError, toAbsolutePath, toApiPath } from "../utils/path.util.js";
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { IGNORED_DIRS, IGNORED_FILES, WORK_FOLDER } from '../config/env.js';
+import { HttpError, toAbsolutePath, toApiPath } from '../utils/path.util.js';
 
 export async function getFileTree(): Promise<string[]> {
   const files: string[] = [];
@@ -33,32 +33,40 @@ export async function readFiles(filenames: string[]): Promise<Record<string, str
     filenames.map(async (filename) => {
       const absolute = toAbsolutePath(filename);
       try {
-        contents[filename] = await fs.readFile(absolute, "utf8");
+        contents[filename] = await fs.readFile(absolute, 'utf8');
       } catch {
         throw new HttpError(404, `File not found: ${filename}`);
       }
-    }),
+    })
   );
 
   return contents;
+}
+
+// binary files (images the agents generate) arrive as data URLs; everything else is utf8 text
+const DATA_URL = /^data:[\w.+-]+\/[\w.+-]+;base64,/;
+
+function decodeContent(content: string): Buffer | string {
+  const match = DATA_URL.exec(content);
+  return match ? Buffer.from(content.slice(match[0].length), 'base64') : content;
 }
 
 export async function writeFiles(payload: Record<string, string>): Promise<string[]> {
   const entries = Object.entries(payload);
 
   if (entries.length === 0) {
-    throw new HttpError(400, "Request body must contain at least one file");
+    throw new HttpError(400, 'Request body must contain at least one file');
   }
 
   await Promise.all(
     entries.map(async ([filename, content]) => {
-      if (typeof content !== "string") {
+      if (typeof content !== 'string') {
         throw new HttpError(400, `Content for ${filename} must be a string`);
       }
       const absolute = toAbsolutePath(filename);
       await fs.mkdir(path.dirname(absolute), { recursive: true });
-      await fs.writeFile(absolute, content, "utf8");
-    }),
+      await fs.writeFile(absolute, decodeContent(content));
+    })
   );
 
   return entries.map(([filename]) => filename);
@@ -73,7 +81,7 @@ export async function deleteFiles(filenames: string[]): Promise<string[]> {
       } catch {
         throw new HttpError(404, `File not found: ${filename}`);
       }
-    }),
+    })
   );
 
   return filenames;

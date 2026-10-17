@@ -193,7 +193,8 @@ export async function createPod(podName: string, projectId: string, projectType:
     kind: 'Pod',
     metadata: {
       name: podName,
-      labels: { app: podName }
+      // hateable/role lets the Playwright MCP NetworkPolicy reach previews and nothing else
+      labels: { app: podName, 'hateable/role': 'preview' }
     },
     spec: {
       volumes: [
@@ -207,8 +208,7 @@ export async function createPod(podName: string, projectId: string, projectType:
         ...appContainers,
         {
           name: 'express-container',
-          image: 'express-image',
-          imagePullPolicy: 'IfNotPresent',
+          image: 'express-image', // untagged => pull policy Always, nodes never keep a stale build
           ports: [{ containerPort: 8080 }],
           resources: {
             requests: { memory: '512Mi', cpu: '250m' },
@@ -223,8 +223,7 @@ export async function createPod(podName: string, projectId: string, projectType:
         },
         {
           name: 'sync-container',
-          image: 'sync-image',
-          imagePullPolicy: 'IfNotPresent',
+          image: 'sync-image', // untagged => pull policy Always, nodes never keep a stale build
           resources: {
             requests: { memory: '256Mi', cpu: '100m' },
             limits: { memory: '512Mi', cpu: '250m' }
