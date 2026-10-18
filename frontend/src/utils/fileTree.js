@@ -90,3 +90,50 @@ export function buildFileTree(paths) {
   sortNodes(root);
   return root;
 }
+
+const IMAGE_EXTENSIONS = new Set([
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'avif',
+  'svg',
+  'ico',
+  'bmp'
+]);
+const BINARY_EXTENSIONS = new Set([
+  'woff',
+  'woff2',
+  'ttf',
+  'otf',
+  'eot',
+  'pdf',
+  'zip',
+  'gz',
+  'tgz',
+  'tar',
+  '7z',
+  'rar',
+  'mp3',
+  'mp4',
+  'wav',
+  'ogg',
+  'webm',
+  'mov',
+  'avi',
+  'flac',
+  'wasm',
+  'exe',
+  'dll',
+  'so',
+  'bin'
+]);
+
+// how the editor should open a file: 'image' (preview), 'binary' (not editable) or 'text' (Monaco)
+export function fileKind(path) {
+  const extension = path.split('.').pop()?.toLowerCase() ?? '';
+  if (IMAGE_EXTENSIONS.has(extension)) return 'image';
+  if (BINARY_EXTENSIONS.has(extension)) return 'binary';
+  return 'text';
+}

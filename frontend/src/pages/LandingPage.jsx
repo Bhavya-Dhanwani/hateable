@@ -1,36 +1,206 @@
-import { motion } from 'motion/react';
-import { ArrowRight, Code2, MessageSquareHeart, Rocket } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { ArrowRight, ArrowUpRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../auth/auth-context.js';
-import HeroGlow from '../components/bits/HeroGlow.jsx';
-import BlurText from '../components/bits/BlurText.jsx';
-import RotatingText from '../components/bits/RotatingText.jsx';
-import SpotlightCard from '../components/bits/SpotlightCard.jsx';
 import { TransitionLink } from '../components/HeartbreakTransition.jsx';
 import { useHeartbreak } from '../components/heartbreak-context.js';
 import { Logo } from '../components/Logo.jsx';
 import { PromptBox } from '../components/PromptBox.jsx';
+import {
+  BounceCards,
+  FlexCarousel,
+  FlowingMenu,
+  Photo,
+  PinnedSteps
+} from '../components/landing/effects.jsx';
 import { savePendingPrompt } from '../utils/pendingPrompt.js';
 
-const FEATURES = [
+// photos: free Unsplash images (ids), hotlinked from their CDN
+
+// the hero: one image at a time, full screen
+const SLIDES = [
+  { id: '1650943574955-ac02c65cfc71', alt: 'A spiral of dark blades with glowing teal edges' },
+  { id: '1643139863038-7355941e9e89', alt: 'Glass rings glowing purple against black' },
+  { id: '1622737133809-d95047b9e673', alt: 'Dark floating cubes and two glowing yellow spheres' },
+  { id: '1627637819794-fba32f82be16', alt: 'Blue layered waves blooming out of the dark' }
+];
+const SLIDE_MS = 6500;
+
+const STRIP = [
   {
-    icon: MessageSquareHeart,
-    title: 'Talk, it builds',
-    body: 'An AI agent that reads, writes and refactors real files in your project — and streams every step.'
+    id: '1603189343302-e603f7add05a',
+    label: 'Portfolio',
+    alt: 'A person in a wide-sleeved black jacket in silhouette'
+  },
+  { id: '1542291026-7eec264c27ff', label: 'Store', alt: 'A red sneaker on a red background' },
+  {
+    id: '1545418314-7ce0b9b53901',
+    label: 'Café',
+    alt: 'An espresso machine below a chalkboard menu'
   },
   {
-    icon: Code2,
-    title: 'A real editor',
-    body: 'Monaco, a live file tree and full control. Take the wheel whenever the AI gets too confident.'
+    id: '1631125915902-d8abe9225ff2',
+    label: 'Maker shop',
+    alt: 'Three clay vases on a white concrete table'
   },
   {
-    icon: Rocket,
-    title: 'Live in seconds',
-    body: 'Every project gets its own isolated runtime and preview URL, spun up on demand.'
+    id: '1498075702571-ecb018f3752d',
+    label: 'Studio',
+    alt: 'Hand lettering on tracing paper with a pencil'
+  },
+  { id: '1666621630026-862eea07236c', label: 'Launch', alt: 'A perfume bottle in soft light' },
+  {
+    id: '1574015974293-817f0ebebb74',
+    label: 'Lookbook',
+    alt: 'A black-and-white portrait in a long-sleeved shirt'
+  },
+  {
+    id: '1770739538932-433941c1267e',
+    label: 'Booking',
+    alt: 'A modern café interior with tables and chairs'
   }
 ];
 
-const rise = { hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0 } };
+// the flowing menu: click a row to start a project from that prompt
+const STARTERS = [
+  {
+    label: 'Portfolio',
+    prompt: 'a portfolio that feels like a Mac desktop',
+    images: ['1595065820514-a4181d40f2c6', '1558683018-e0e6e20f2bdb']
+  },
+  {
+    label: 'Online store',
+    prompt: 'a sneaker store with a cart and checkout',
+    images: ['1780832000120-23892cd70642', '1789520482092-bf7a66ef8281']
+  },
+  {
+    label: 'Café',
+    prompt: 'a café site with a menu and table booking',
+    images: ['1610632380989-680fe40816c6', '1596098823457-74e360fcd023']
+  },
+  {
+    label: 'Product launch',
+    prompt: 'a launch page with a waitlist for a new perfume',
+    images: ['1608528577891-eb055944f2e7', '1608721279136-cd41b752fa41']
+  }
+];
+
+// the close: a fan of product shots, the kind of thing people ship from here
+const CARDS = [
+  { id: '1601784551446-20c9e07cdbdb', alt: 'A phone showing an app on a dark surface' },
+  { id: '1525547719571-a2d4ac8945e2', alt: 'A laptop glowing in a dark room' },
+  { id: '1597740985671-2a8a3b80502e', alt: 'A phone app lit in purple' },
+  { id: '1547119957-637f8679db1e', alt: 'A desk with dashboards on screen' },
+  { id: '1502783167913-8e718e555a06', alt: 'A laptop with a purple glow in the dark' }
+];
+
+const STEPS = [
+  {
+    id: '1620121692029-d088224ddc74',
+    alt: 'Deep blue layered waves glowing in the dark',
+    title: 'Describe it',
+    tags: ['Planner', 'Coder', 'Live files'],
+    body: 'One sentence is enough. Agents plan it, split the work and write real files into a live workspace while you watch.'
+  },
+  {
+    id: '1620641788421-7a1c342ea42e',
+    alt: 'Dark purple folds with a hot pink glow',
+    title: 'Shape it',
+    tags: ['Code editor', 'Terminal', 'Browser QA'],
+    body: 'Step into the code, a real terminal, the live preview. Agents review each other and check it in a real browser.'
+  },
+  {
+    id: '1614851099511-773084f6911d',
+    alt: 'Dark red and magenta light bleeding through black',
+    title: 'Ship it',
+    tags: ['One click', 'Custom domain', 'Idle sleep'],
+    body: 'One click puts it on its own address or your domain. It naps when nobody visits and wakes for the next person.'
+  }
+];
+
+const EASE = [0.22, 1, 0.36, 1];
+
+/**
+ * The hero image: fades in on load, then crossfades to the next slide every few seconds.
+ * A thin progress line and 01/04 counter keep time.
+ */
+function HeroSlides() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const id = setInterval(() => setIndex((i) => (i + 1) % SLIDES.length), SLIDE_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <>
+      <motion.div
+        className="absolute inset-0 overflow-hidden bg-[#050507]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1.2, delay: 0.1, ease: 'easeOut' }}
+      >
+        <AnimatePresence initial={false}>
+          <motion.div
+            key={index}
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.4, ease: 'easeInOut' }}
+          >
+            <Photo
+              id={SLIDES[index].id}
+              alt={SLIDES[index].alt}
+              sizes="100vw"
+              loading={index === 0 ? 'eager' : 'lazy'}
+              fetchPriority={index === 0 ? 'high' : 'auto'}
+            />
+          </motion.div>
+        </AnimatePresence>
+        {/* shade the corner the words sit in, keep the rest of the image untouched */}
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgb(5_5_7/0.85),rgb(5_5_7/0.15)_45%,transparent_70%)]" />
+      </motion.div>
+
+      <div className="absolute top-24 right-5 z-10 hidden w-40 sm:right-8 sm:block lg:right-12">
+        <div className="flex justify-between font-mono text-[11px] text-white/60 tabular-nums">
+          <span>{String(index + 1).padStart(2, '0')}</span>
+          <span className="text-white/35">{String(SLIDES.length).padStart(2, '0')}</span>
+        </div>
+        <div className="mt-2 h-px overflow-hidden bg-white/15">
+          <motion.div
+            key={index}
+            className="h-full origin-left bg-white"
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: SLIDE_MS / 1000, ease: 'linear' }}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+// every section opens the same way: a rule, a small index on the left, a big title on the right
+function SectionHead({ index, label, title, note }) {
+  return (
+    <header className="mb-14 grid grid-cols-1 gap-6 border-t border-white/10 pt-6 sm:mb-20 lg:grid-cols-12">
+      <span className="font-mono text-[11px] tracking-wide text-white/40 uppercase tabular-nums lg:col-span-3">
+        {index} / 05 &nbsp;·&nbsp; {label}
+      </span>
+      <h2 className="text-[clamp(2.5rem,6vw,6.5rem)] leading-[0.95] font-medium tracking-[-0.045em] lg:col-span-7">
+        {title}
+      </h2>
+      {note && (
+        <p className="max-w-xs text-sm leading-6 text-white/45 lg:col-span-2 lg:self-end">{note}</p>
+      )}
+    </header>
+  );
+}
+
+const GUTTER = 'px-5 sm:px-8 lg:px-12';
 
 export function LandingPage() {
   const { user } = useAuth();
@@ -43,109 +213,135 @@ export function LandingPage() {
   }
 
   return (
-    <main className="grain relative min-h-svh overflow-hidden bg-ink">
-      <div className="grid-fade absolute inset-0" />
-
-      <nav className="relative z-10 mx-auto flex h-18 max-w-6xl items-center justify-between px-5">
-        <Link to="/" aria-label="Hateable home">
-          <Logo />
-        </Link>
-        <div className="flex items-center gap-2">
-          {user ? (
-            <TransitionLink
-              to="/projects"
-              className="flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-medium text-ink transition hover:bg-white/90"
-            >
-              Your projects <ArrowRight className="size-3.5" />
-            </TransitionLink>
-          ) : (
-            <>
+    <main className="min-h-svh bg-ink text-white">
+      <nav className="fixed inset-x-0 top-0 z-30 border-b border-white/[0.06] bg-ink/55 backdrop-blur-xl backdrop-saturate-150">
+        <div className={`flex h-16 items-center justify-between ${GUTTER}`}>
+          <Link to="/" aria-label="Hateable home">
+            <Logo size={22} />
+          </Link>
+          <div className="flex items-center gap-1 text-sm">
+            {user ? (
               <TransitionLink
-                to="/login"
-                className="rounded-full px-4 py-2 text-sm text-white/70 transition hover:text-white"
+                to="/projects"
+                className="flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-white backdrop-blur-md transition hover:bg-white/20"
               >
-                Log in
+                Your projects <ArrowRight className="size-3.5" />
               </TransitionLink>
-              <TransitionLink
-                to="/signup"
-                className="rounded-full bg-white px-4 py-2 text-sm font-medium text-ink transition hover:bg-white/90"
-              >
-                Get started
-              </TransitionLink>
-            </>
-          )}
+            ) : (
+              <>
+                <TransitionLink
+                  to="/login"
+                  className="rounded-full px-4 py-2 text-white/70 transition hover:text-white"
+                >
+                  Log in
+                </TransitionLink>
+                <TransitionLink
+                  to="/signup"
+                  className="rounded-full bg-white/10 px-4 py-2 text-white backdrop-blur-md transition hover:bg-white/20"
+                >
+                  Start building
+                </TransitionLink>
+              </>
+            )}
+          </div>
         </div>
       </nav>
 
-      <section className="relative z-10 mx-auto flex max-w-3xl flex-col items-center px-5 pt-[12svh] text-center">
-        <motion.a
-          href="#features"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 flex items-center gap-2 rounded-full border border-line bg-white/[0.03] py-1 pr-3 pl-1 text-xs text-white/70 backdrop-blur"
-        >
-          <span className="rounded-full bg-white px-2 py-0.5 font-medium text-black">New</span>
-          <span className="shiny-text">AI agent now edits your files live</span>
-        </motion.a>
-
-        <BlurText
-          text="Build something you'll"
-          className="text-4xl font-semibold tracking-tight text-white sm:text-6xl"
-        />
-        <h1 className="mt-1 font-serif text-5xl italic tracking-tight sm:text-7xl">
-          <RotatingText texts={['hate to love', 'ship tonight', 'never debug', 'brag about']} />
-        </h1>
-        <motion.p
-          initial="hidden"
-          animate="show"
-          variants={rise}
-          transition={{ delay: 0.5, duration: 0.6 }}
-          className="mt-5 max-w-lg text-base text-white/55 sm:text-lg"
-        >
-          Describe an app. Hateable writes the code, runs it and hands you the keys. Brutally fast.
-        </motion.p>
-
-        <motion.div
-          initial="hidden"
-          animate="show"
-          variants={rise}
-          transition={{ delay: 0.7, duration: 0.7 }}
-          className="relative mt-10 w-full"
-        >
-          <HeroGlow className="absolute inset-x-[-25%] -top-[30%] -z-10 h-[220%]" />
-          <PromptBox onSubmit={start} />
-        </motion.div>
-      </section>
-
-      <section
-        id="features"
-        className="relative z-10 mx-auto grid max-w-6xl gap-4 px-5 pt-32 pb-24 md:grid-cols-3"
-      >
-        {FEATURES.map(({ icon: Icon, title, body }, i) => (
-          <motion.div
-            key={title}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true }}
-            variants={rise}
-            transition={{ delay: i * 0.1, duration: 0.6 }}
+      {/* hero: the headline owns the screen, the prompt sits bottom right, details bottom left */}
+      <section className="relative h-svh min-h-[40rem]">
+        <HeroSlides />
+        <div className={`relative z-10 flex h-full flex-col justify-end pb-8 sm:pb-12 ${GUTTER}`}>
+          <motion.h1
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1.1, delay: 0.5, ease: EASE }}
+            className="text-[clamp(3rem,8.6vw,10rem)] leading-[0.9] font-medium tracking-[-0.055em]"
           >
-            <SpotlightCard className="h-full rounded-2xl border border-line bg-panel/70 p-6 backdrop-blur">
-              <span className="mb-5 grid size-10 place-items-center rounded-xl bg-white/[0.06] text-white/80">
-                <Icon className="size-5" />
-              </span>
-              <h3 className="text-lg font-medium text-white">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-white/50">{body}</p>
-            </SpotlightCard>
+            Build something you&rsquo;ll
+            <br />
+            <span className="font-serif font-normal tracking-[-0.02em] italic">hate to love.</span>
+          </motion.h1>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1, delay: 0.75, ease: EASE }}
+            className="mt-10 grid grid-cols-1 items-end gap-8 lg:grid-cols-12"
+          >
+            <p className="max-w-xs text-sm leading-6 text-white/55 lg:col-span-4">
+              One sentence in. Agents write, test and ship a real app, live on its own address.
+            </p>
+            <div className="min-w-0 lg:col-span-6 lg:col-start-7 xl:col-span-5 xl:col-start-8">
+              <PromptBox onSubmit={start} />
+            </div>
           </motion.div>
-        ))}
+        </div>
       </section>
 
-      <footer className="relative z-10 border-t border-line">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-8 text-xs text-white/35">
-          <Logo size={20} />
-          <span>Made with mild contempt.</span>
+      {/* ideas: a flex carousel across the full width */}
+      <section className={`py-28 sm:py-40 ${GUTTER}`}>
+        <SectionHead
+          index="02"
+          label="Ideas"
+          title="Things you could build tonight."
+          note="Hover a panel. Every one of these started as a single sentence."
+        />
+        <FlexCarousel items={STRIP.slice(0, 6)} />
+      </section>
+
+      {/* how it works: pinned while scrolling stacks one image per step */}
+      <section className={`pb-28 sm:pb-40 ${GUTTER}`}>
+        <SectionHead
+          index="03"
+          label="Process"
+          title="From a sentence to a site."
+          note="Keep scrolling. It stays put while the steps play."
+        />
+        <PinnedSteps steps={STEPS} />
+      </section>
+
+      {/* start from: a flowing menu, each row starts a project */}
+      <section className={`pb-28 sm:pb-40 ${GUTTER}`}>
+        <SectionHead
+          index="04"
+          label="Start"
+          title="Or start from one of these."
+          note="Click a row and it becomes your first prompt."
+        />
+        <FlowingMenu
+          items={STARTERS}
+          onPick={(prompt) => start({ prompt: `Build ${prompt}`, projectType: 'react-ts' })}
+        />
+      </section>
+
+      {/* the close: the headline on the left, a fan of bounce cards on the right */}
+      <section className={`overflow-x-clip pt-6 pb-28 sm:pb-40 ${GUTTER}`}>
+        <div className="grid grid-cols-1 items-center gap-16 border-t border-white/10 pt-6 lg:grid-cols-12">
+          <div className="lg:col-span-6">
+            <span className="font-mono text-[11px] tracking-wide text-white/40 uppercase tabular-nums">
+              05 / 05 &nbsp;·&nbsp; Go
+            </span>
+            <h2 className="mt-10 text-[clamp(2.75rem,7vw,8rem)] leading-[0.9] font-medium tracking-[-0.05em]">
+              Your next app is one <span className="font-serif font-normal italic">sentence</span>{' '}
+              away.
+            </h2>
+            <TransitionLink
+              to={user ? '/projects' : '/signup'}
+              className="group mt-10 inline-flex h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-medium text-black transition hover:bg-white/90"
+            >
+              {user ? 'Open your projects' : 'Start building'}
+              <ArrowUpRight className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </TransitionLink>
+          </div>
+          <BounceCards items={CARDS} className="h-[22rem] sm:h-[30rem] lg:col-span-6" />
         </div>
+      </section>
+
+      <footer
+        className={`grid grid-cols-1 items-center gap-4 py-10 font-mono text-[11px] text-white/35 sm:grid-cols-3 ${GUTTER}`}
+      >
+        <Logo size={18} />
+        <span className="sm:text-center">Imagery from Unsplash</span>
+        <span className="sm:text-right">Made with mild contempt</span>
       </footer>
     </main>
   );

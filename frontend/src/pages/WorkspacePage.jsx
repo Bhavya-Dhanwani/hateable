@@ -3,6 +3,7 @@ import { ArrowLeft, Code2, Eye, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { filesApi } from '../api/files.js';
+import { fileKind } from '../utils/fileTree.js';
 import { projectsApi } from '../api/projects.js';
 import { LoadingScreen } from '../components/LoadingScreen.jsx';
 import { LogoMark } from '../components/Logo.jsx';
@@ -118,7 +119,13 @@ export function WorkspacePage() {
   const onAgentEdit = useCallback(async () => {
     await refreshFiles();
     setPreviewKey((k) => k + 1);
-    const openPaths = tabs.filter((t) => !t.isDirty).map((t) => t.path);
+    // previews of images the agent may have regenerated reload; text tabs re-read below
+    setTabs((current) =>
+      current.map((t) => (t.kind && t.kind !== 'text' ? { ...t, version: t.version + 1 } : t))
+    );
+    const openPaths = tabs
+      .filter((t) => !t.isDirty && (t.kind ?? 'text') === 'text')
+      .map((t) => t.path);
     if (!openPaths.length) return;
     try {
       const files = await filesApi.read(projectId, openPaths);
@@ -133,6 +140,16 @@ export function WorkspacePage() {
   async function openFile(path) {
     setActivePath(path);
     if (tabs.some((t) => t.path === path)) return;
+    // images get a preview and other binaries a notice: their bytes are never read as text
+    const kind = fileKind(path);
+    if (kind !== 'text') {
+      setTabs((current) =>
+        current.some((t) => t.path === path)
+          ? current
+          : [...current, { path, kind, content: '', isDirty: false, version: 0 }]
+      );
+      return;
+    }
     try {
       const files = await filesApi.read(projectId, [path]);
       setTabs((current) =>
@@ -316,6 +333,7 @@ export function WorkspacePage() {
                   onRemove={removeOpenPaths}
                 />
                 <CodeEditorPane
+                  projectId={projectId}
                   tabs={tabs}
                   activePath={activePath}
                   onSelect={setActivePath}

@@ -1,6 +1,7 @@
-import { useEffect, useEffectEvent } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import Editor from '@monaco-editor/react';
-import { FileCode2, Save, X } from 'lucide-react';
+import { Download, ExternalLink, File, FileCode2, Image as ImageIcon, Save, X } from 'lucide-react';
+import { filesApi } from '../../api/files.js';
 import { languageForPath } from '../../utils/fileTree.js';
 
 // Monaco's built-in TS checker defaults to no JSX and can't see the project's node_modules
@@ -25,7 +26,69 @@ function configureTypeScript(monaco) {
   }
 }
 
+// An image file: shown as the image, on a checkerboard so transparency is visible.
+function ImagePreview({ src, name }) {
+  const [size, setSize] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="ide-scroll grid min-h-0 flex-1 place-items-center overflow-auto p-6">
+        {failed ? (
+          <p className="text-xs text-zinc-500">This image could not be displayed.</p>
+        ) : (
+          <img
+            src={src}
+            alt={name}
+            onLoad={(e) =>
+              setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
+            }
+            onError={() => setFailed(true)}
+            className="max-h-full max-w-full rounded border border-white/8 object-contain [image-rendering:auto]"
+            style={{
+              backgroundImage: 'repeating-conic-gradient(#1f1f23 0% 25%, #141416 0% 50%)',
+              backgroundSize: '16px 16px'
+            }}
+          />
+        )}
+      </div>
+      <div className="flex h-8 shrink-0 items-center justify-between border-t border-white/8 px-3 font-mono text-[11px] text-zinc-500">
+        <span>{size ? `${size.w} × ${size.h}px` : name}</span>
+        <a
+          href={src}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1 hover:text-white"
+        >
+          Open <ExternalLink className="size-3" />
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// Fonts, PDFs, media, archives: not editable here, but downloadable.
+function BinaryNotice({ src, name }) {
+  return (
+    <div className="grid h-full place-items-center px-8 text-center">
+      <div>
+        <File className="mx-auto mb-4 size-8 text-zinc-700" />
+        <p className="text-sm font-bold text-zinc-400">{name} is a binary file</p>
+        <p className="mt-1 text-xs text-zinc-600">It can't be edited as text.</p>
+        <a
+          href={src}
+          download={name}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/15"
+        >
+          <Download className="size-3.5" /> Download
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export function CodeEditorPane({
+  projectId,
   tabs,
   activePath,
   onSelect,
@@ -63,7 +126,13 @@ export function CodeEditorPane({
               onClick={() => onSelect(tab.path)}
               title={tab.path}
             >
-              <FileCode2 className="size-3.5 shrink-0 text-sky-400" />
+              {tab.kind === 'image' ? (
+                <ImageIcon className="size-3.5 shrink-0 text-emerald-400" />
+              ) : tab.kind === 'binary' ? (
+                <File className="size-3.5 shrink-0 text-zinc-500" />
+              ) : (
+                <FileCode2 className="size-3.5 shrink-0 text-sky-400" />
+              )}
               <span className="min-w-0 flex-1 truncate">{tab.path.split('/').pop()}</span>
               {tab.isDirty && (
                 <span
@@ -86,7 +155,7 @@ export function CodeEditorPane({
             </button>
           ))}
         </div>
-        {activeTab && (
+        {activeTab && (activeTab.kind ?? 'text') === 'text' && (
           <button
             className="flex w-11 shrink-0 items-center justify-center border-l border-white/8 text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-40"
             type="button"
@@ -101,7 +170,19 @@ export function CodeEditorPane({
       </div>
 
       <div className="min-h-0 flex-1">
-        {activeTab ? (
+        {activeTab?.kind === 'image' ? (
+          <ImagePreview
+            // the version bumps after an AI edit, so a regenerated image is fetched again
+            key={`${activeTab.path}#${activeTab.version}`}
+            src={`${filesApi.rawUrl(projectId, activeTab.path)}&v=${activeTab.version}`}
+            name={activeTab.path.split('/').pop()}
+          />
+        ) : activeTab?.kind === 'binary' ? (
+          <BinaryNotice
+            src={filesApi.rawUrl(projectId, activeTab.path)}
+            name={activeTab.path.split('/').pop()}
+          />
+        ) : activeTab ? (
           <Editor
             path={activeTab.path}
             language={languageForPath(activeTab.path)}
@@ -119,7 +200,12 @@ export function CodeEditorPane({
                   'editorLineNumber.foreground': '#3f3f46',
                   'editorLineNumber.activeForeground': '#e4e4e7',
                   'editorCursor.foreground': '#ff4d6d',
-                  'editor.selectionBackground': '#ffffff1f'
+                  'editor.selectionBackground': '#ffffff1f',
+                  // same scrollbar as the rest of the app (styles.css)
+                  'scrollbarSlider.background': '#ffffff1f',
+                  'scrollbarSlider.hoverBackground': '#ffffff3d',
+                  'scrollbarSlider.activeBackground': '#ff4d6d99',
+                  'scrollbar.shadow': '#00000000'
                 }
               });
             }}
@@ -135,7 +221,16 @@ export function CodeEditorPane({
               scrollBeyondLastLine: false,
               smoothScrolling: true,
               tabSize: 2,
-              wordWrap: 'on'
+              wordWrap: 'on',
+              scrollbar: {
+                useShadows: false,
+                verticalScrollbarSize: 10,
+                horizontalScrollbarSize: 10,
+                verticalSliderSize: 6,
+                horizontalSliderSize: 6
+              },
+              overviewRulerBorder: false,
+              hideCursorInOverviewRuler: true
             }}
             loading={
               <div className="grid h-full place-items-center text-xs font-semibold text-zinc-600">

@@ -3,6 +3,7 @@ import {
   createFiles,
   getFileTree,
   getFiles,
+  getRawFile,
   removeFiles,
   updateFiles
 } from '../controllers/file.controller.js';
@@ -12,6 +13,7 @@ const router: Router = Router();
 
 router.get('/file-tree', getFileTree);
 router.get('/files', getFiles);
+router.get('/raw', getRawFile);
 router.post('/files', createFiles);
 router.patch('/files', updateFiles);
 router.delete('/files', removeFiles);
