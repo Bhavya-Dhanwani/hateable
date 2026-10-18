@@ -1,5 +1,7 @@
 // Importing modules
 import { Request, Response } from 'express';
+import Forbidden from '../../shared/errors/Forbidden.error.js';
+import { extrasAllowed, planOf } from '../../shared/services/plan.service.js';
 import { z } from 'zod';
 import { ask } from '../../shared/agents/llm.js';
 import { prompt } from '../../shared/agents/prompts.js';
@@ -68,6 +70,16 @@ class InsightsController {
 
     if (!projectId || !question?.trim()) {
       throw new BadRequest('projectId and question are required');
+    }
+
+    // plan gate: on the free plan the site AI works in the user's first project only
+    const user = (req as Request & { user?: { userId?: string; _id?: string; plan?: unknown } })
+      .user;
+    const plan = planOf(user);
+    if (!(await extrasAllowed(String(user?.userId || user?._id || ''), plan, projectId))) {
+      throw new Forbidden(
+        'On the Hobby plan, the live-site AI works in your first project only. Upgrade to Pro to use it everywhere.'
+      );
     }
 
     // reading the site's data as the user (projectService checks they own it)

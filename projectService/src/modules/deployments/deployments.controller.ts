@@ -1,5 +1,6 @@
 // Importing modules
 import { Request, Response } from 'express';
+import { PLAN_LIMITS, planOf } from '../../shared/constants/plans.constants.js';
 import Project from '../../shared/models/project.model.js';
 import DeploymentDao from '../../shared/dao/deployment.dao.js';
 import NotFound from '../../shared/errors/NotFound.error.js';
@@ -84,7 +85,7 @@ class DeploymentsController {
     return {
       deployment,
       url: deploymentUrl(deployment.slug),
-      status: idleRemainingMs > 0 ? 'live' : 'sleeping',
+      status: deployment.alwaysOn || idleRemainingMs > 0 ? 'live' : 'sleeping',
       idleRemainingMs,
       idleTimeoutMs: env.DEPLOY_IDLE_TTL_MS
     };
@@ -127,7 +128,8 @@ class DeploymentsController {
     const deployment = await this.deploymentDao.upsertDeployment(projectId, {
       slug,
       userId: currentUserId(req),
-      projectType: project.projectType
+      projectType: project.projectType,
+      alwaysOn: PLAN_LIMITS[planOf((req as Request & { user?: { plan?: unknown } }).user)].alwaysOn
     });
 
     // holding the 15 minute idle window, then (re)starting the pod on the new snapshot

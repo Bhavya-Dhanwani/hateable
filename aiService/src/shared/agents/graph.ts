@@ -370,6 +370,7 @@ export async function runAgents(opts: {
   history: string; // recent conversation, for follow-up requests
   fileServerUrl: string;
   previewUrl?: string; // in-cluster preview origin; enables the browser check when Playwright MCP is set up
+  extras?: boolean; // plan gate for AI image generation and the browser check (default on)
   emit: (e: AgentEvent) => void;
   signal?: AbortSignal;
 }): Promise<{ files: string[]; reports: string[] }> {
@@ -380,7 +381,9 @@ export async function runAgents(opts: {
     agents: 0,
     cancelled: false,
     emit: opts.emit,
-    images: createImageResolver((message) => opts.emit({ path: 'Images', depth: 0, message }))
+    images: createImageResolver((message) => opts.emit({ path: 'Images', depth: 0, message }), {
+      generate: opts.extras !== false
+    })
   };
   runs.set(runId, ctx);
   opts.signal?.addEventListener('abort', () => (ctx.cancelled = true));
@@ -407,7 +410,12 @@ export async function runAgents(opts: {
     const reports = [...out.reports];
 
     // open the result in a real browser; hand anything broken to one more agent, then re-check
-    if (opts.previewUrl && hasMcpServer('playwright') && Object.keys(files).length) {
+    if (
+      opts.extras !== false &&
+      opts.previewUrl &&
+      hasMcpServer('playwright') &&
+      Object.keys(files).length
+    ) {
       const qa = (message: string) => opts.emit({ path: 'Browser QA', depth: 0, message });
 
       for (let round = 0; round <= env.MAX_BROWSER_FIX_ROUNDS; round++) {

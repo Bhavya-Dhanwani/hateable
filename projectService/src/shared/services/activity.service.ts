@@ -152,8 +152,20 @@ async function sleepDeployment(slug: string) {
 
     console.log(`[idle-reaper] deployment ${slug} is idle, putting it to sleep`);
 
-    // the pod's logs die with it: keep the last run for the owner's log view
     const deployment = await Deployment.findOne({ slug });
+
+    // Pro and Team sites stay up: re-arm the idle window instead of sleeping
+    if (deployment?.alwaysOn) {
+      await redis.set(
+        `${DEPLOY_ACTIVITY_KEY_PREFIX}${slug}`,
+        Date.now().toString(),
+        'PX',
+        env.DEPLOY_IDLE_TTL_MS
+      );
+      return;
+    }
+
+    // the pod's logs die with it: keep the last run for the owner's log view
     if (deployment) {
       await snapshotDeploymentLogs(slug, `deploy-pod-${slug}`, deployment.projectType);
     }

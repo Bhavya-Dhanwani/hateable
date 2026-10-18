@@ -206,7 +206,12 @@ export function DeployButton({ projectId }) {
               </div>
 
               <p className="mt-3 flex items-center gap-2 text-xs text-white/55">
-                {isLive ? (
+                {info.deployment?.alwaysOn ? (
+                  <>
+                    <span className="size-1.5 rounded-full bg-emerald-400" />
+                    Live · always on with your plan
+                  </>
+                ) : isLive ? (
                   <>
                     <span className="size-1.5 rounded-full bg-emerald-400" />
                     Live · naps in{' '}
@@ -219,9 +224,11 @@ export function DeployButton({ projectId }) {
                   </>
                 )}
               </p>
-              <p className="mt-1 text-[11px] text-white/30">
-                Every visit resets the {Math.round(info.idleTimeoutMs / 60000)} minute timer.
-              </p>
+              {!info.deployment?.alwaysOn && (
+                <p className="mt-1 text-[11px] text-white/30">
+                  Every visit resets the {Math.round(info.idleTimeoutMs / 60000)} minute timer.
+                </p>
+              )}
 
               {error && (
                 <p role="alert" className="mt-3 text-xs text-red-300">

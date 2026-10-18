@@ -15,6 +15,7 @@ import {
 import BadRequest from '../../shared/errors/BadRequest.error.js';
 import Unauthorized from '../../shared/errors/Unauthorized.error.js';
 import { resolveProject } from './utils/project.util.js';
+import { extrasAllowed, planOf, takeMessage } from '../../shared/services/plan.service.js';
 import { resolveConversation, generateAndSaveTitle } from './utils/conversation.util.js';
 import {
   saveUserMessage,
@@ -59,6 +60,12 @@ class ChatController {
 
     // 1. Resolve project
     const project = await resolveProject(projectId, this.projectDao);
+
+    // plan limits: one message off the rolling 24h allowance (429 when it's used up), and
+    // whether this project gets image generation and the browser test
+    const plan = planOf(req.user);
+    await takeMessage(userId.toString(), plan);
+    const extras = await extrasAllowed(userId.toString(), plan, projectId);
     // the pod file server mounts its routes at the root (express-file-server/src/app/app.ts)
     let fileServerUrl = `http://${project.serviceName}:8000`;
 
@@ -190,6 +197,7 @@ class ChatController {
           fileServerUrl,
           // the browser check opens the same preview the user sees, from inside the cluster
           previewUrl: project.serviceName ? `http://${project.serviceName}` : undefined,
+          extras,
           signal: abort.signal,
           emit: (e) => send('agent', e)
         });

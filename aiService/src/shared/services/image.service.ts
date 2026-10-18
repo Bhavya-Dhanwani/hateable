@@ -149,16 +149,21 @@ async function generate(
 
 /**
  * Per-run image resolver. The Replicate child process is started on the first generated
- * image only, and `close` must be called when the run ends.
+ * image only, and `close` must be called when the run ends. `generate: false` turns AI image
+ * generation off and serves stock photos instead.
  */
-export function createImageResolver(emit: (message: string) => void) {
+export function createImageResolver(
+  emit: (message: string) => void,
+  opts: { generate?: boolean } = {}
+) {
   let session: Promise<ReplicateSession> | null = null;
   let used = 0;
 
   async function resolveOne(req: ImageRequest): Promise<ResolvedImage> {
     if (++used > env.MAX_IMAGES_PER_RUN) return placeholder(req.aspect);
 
-    if (req.kind === 'generated' && hasMcpServer('replicate')) {
+    // generation can be off for this project (free plan): those images fall back to stock photos
+    if (req.kind === 'generated' && opts.generate !== false && hasMcpServer('replicate')) {
       try {
         emit(`generating image "${req.id}"...`);
         session ??= openReplicateSession();

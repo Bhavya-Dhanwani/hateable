@@ -56,7 +56,9 @@ export function OverviewPage() {
 
       <dl className="mt-6 grid gap-x-10 border-y border-line sm:grid-cols-2">
         <Fact label="Status">
-          {info.status === 'live' ? (
+          {info.deployment.alwaysOn ? (
+            'Live · always on with your plan'
+          ) : info.status === 'live' ? (
             <>
               Live · naps in <span className="font-mono">{clock(info.idleRemainingMs)}</span>{' '}
               without visitors

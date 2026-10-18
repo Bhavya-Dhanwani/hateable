@@ -38,6 +38,12 @@ const deploymentSchema = new mongoose.Schema(
       required: true
     },
 
+    // Pro and Team sites never go to sleep; set from the owner's plan on every (re)deploy
+    alwaysOn: {
+      type: Boolean,
+      default: false
+    },
+
     // bumped on every redeploy so the dashboard can show which snapshot is live
     version: {
       type: Number,

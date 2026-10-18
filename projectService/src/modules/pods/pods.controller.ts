@@ -14,6 +14,12 @@ import Forbidden from '../../shared/errors/Forbidden.error.js';
 import { publishMessage } from '../../shared/services/broker.service.js';
 import { Writable } from 'node:stream';
 import { followPreviewLogs } from '../../shared/services/logs.service.js';
+import {
+  PLAN_LIMITS,
+  PLAN_NAMES,
+  planOf,
+  slotCost
+} from '../../shared/constants/plans.constants.js';
 
 const currentUserId = (req: Request) => {
   const user = (req as Request & { user?: { userId?: string; _id?: string } }).user;
@@ -41,6 +47,20 @@ class PodsController {
     const { name: projectName, projectType } = req.body;
     const user = (req as Request & { user?: { userId?: string; _id?: string } }).user;
     const userId = user?.userId || user?._id || '';
+
+    // plan limit: every project takes slots (a full-stack one takes two on the free plan)
+    // ponytail: count-then-create, two creates at the same instant can both squeeze in
+    const plan = planOf(user as { plan?: unknown });
+    const existing = await Project.find({ userId }, { projectType: 1 });
+    const used = existing.reduce((n, p) => n + slotCost(plan, p.projectType), 0);
+    const limit = PLAN_LIMITS[plan].projectSlots;
+    if (used + slotCost(plan, projectType as string) > limit) {
+      throw new Forbidden(
+        plan === 'free'
+          ? `The Hobby plan allows 2 projects: 2 frontend, 2 backend, 1 of each, or 1 full-stack. Upgrade to Pro for 10.`
+          : `The ${PLAN_NAMES[plan]} plan allows ${limit} projects.`
+      );
+    }
 
     const project = new Project({
       status: 'starting',
