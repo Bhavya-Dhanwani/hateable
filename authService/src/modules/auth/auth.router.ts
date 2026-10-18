@@ -69,6 +69,41 @@ router.get('/google', authController.googleRedirect);
 router.get('/google/callback', authController.googleCallback);
 
 /*
+    @route POST /api/auth/phone/truecaller
+    @desc Start Truecaller phone verification, returns { requestNonce, deepLink }
+    @access Private
+*/
+router.post('/phone/truecaller', authMiddleware, authController.truecallerStart);
+
+/*
+    @route POST /api/auth/phone/truecaller/callback
+    @desc Callback URL registered in the Truecaller developer portal
+    @access Public (called by Truecaller)
+*/
+router.post('/phone/truecaller/callback', authController.truecallerCallback);
+
+/*
+    @route POST /api/auth/phone/telegram
+    @desc Start Telegram phone verification, returns { requestNonce, link } to the bot
+    @access Private
+*/
+router.post('/phone/telegram', authMiddleware, authController.telegramStart);
+
+/*
+    @route POST /api/auth/phone/telegram/webhook
+    @desc Telegram bot webhook (setWebhook with secret_token = TELEGRAM_WEBHOOK_SECRET)
+    @access Public (called by Telegram)
+*/
+router.post('/phone/telegram/webhook', authController.telegramWebhook);
+
+/*
+    @route GET /api/auth/phone/:nonce
+    @desc Poll a verification: pending, verified (with user), 409 if the number is taken
+    @access Private
+*/
+router.get('/phone/:nonce', authMiddleware, authController.phoneStatus);
+
+/*
     @route POST /api/auth/forgot-password
     @desc Forgot password
     @access Public

@@ -9,6 +9,8 @@ export interface IUserPayload {
   email?: string;
   isVerified?: boolean;
   plan?: string;
+  phone?: string;
+  phoneVerified?: boolean;
   role?: string;
 }
 

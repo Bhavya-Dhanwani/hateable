@@ -12,7 +12,9 @@ function sanitizeUser(user: Record<string, unknown> | null | undefined) {
     name: u.name,
     email: u.email,
     isVerified: u.isVerified,
-    plan: u.plan
+    plan: u.plan,
+    phone: u.phone,
+    phoneVerified: u.phoneVerified
   };
 }
 

@@ -73,11 +73,9 @@ test('stored tokens round-trip and tampering is detected', async () => {
   assert.notEqual(sealed, encrypt('gho_example_token')); // fresh IV every time
   assert.equal(decrypt(sealed), 'gho_example_token');
   const [iv, tag, data] = sealed.split('.');
-  assert.throws(() =>
-    decrypt(
-      [iv, tag, data.slice(0, -2) + (data.endsWith('A') ? 'B' : 'A') + data.slice(-1)].join('.')
-    )
-  );
+  // swap the second-to-last character for a different one (it must actually change)
+  const swapped = data.at(-2) === 'A' ? 'B' : 'A';
+  assert.throws(() => decrypt([iv, tag, data.slice(0, -2) + swapped + data.slice(-1)].join('.')));
 });
 
 test('a stack frame still finds its error when a stdout line lands in between', async () => {

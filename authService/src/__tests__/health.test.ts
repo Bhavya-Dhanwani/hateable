@@ -1,11 +1,11 @@
+// run: npm test
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
 import request from 'supertest';
-import createApp from '../app';
+import createApp from '../app.js';
 
-describe('GET /api/health', () => {
-  it('should return 200 OK with server status', async () => {
-    const app = createApp();
-    const res = await request(app).get('/api/health');
-    expect(res.status).toBe(200);
-    expect(res.body.data).toHaveProperty('status', 'UP');
-  });
+test('GET /api/health returns 200 with server status', async () => {
+  const res = await request(createApp()).get('/api/health');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.data.status, 'UP');
 });

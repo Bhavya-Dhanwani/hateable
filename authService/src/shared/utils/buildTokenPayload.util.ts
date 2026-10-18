@@ -7,6 +7,8 @@ async function buildTokenPayload(user: Record<string, unknown> | object) {
     email?: string;
     isVerified?: boolean;
     plan?: string;
+    phone?: string;
+    phoneVerified?: boolean;
   };
   const tokenPayload = {
     _id: u._id,
@@ -15,6 +17,8 @@ async function buildTokenPayload(user: Record<string, unknown> | object) {
     email: u.email,
     isVerified: u.isVerified,
     plan: u.plan,
+    phone: u.phone,
+    phoneVerified: u.phoneVerified,
     // projectService and aiService check shared-project access against this, so membership
     // changes reach them on the next refresh (within one access-token lifetime)
     workspaces: await workspacesOf(u._id.toString())

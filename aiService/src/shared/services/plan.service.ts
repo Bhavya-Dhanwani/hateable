@@ -7,9 +7,13 @@ import ApiError from '../utils/ApiError.util.js';
 
 export type Plan = 'free' | 'pro' | 'team';
 
-export const AI_LIMITS: Record<Plan, { messagesPerDay: number; extrasEverywhere: boolean }> = {
-  // extras = AI image generation, the real-browser test and the live-site AI
-  free: { messagesPerDay: 2, extrasEverywhere: false },
+export const AI_LIMITS: Record<
+  Plan,
+  { messagesPerDay: number; extrasEverywhere: boolean; maxAgents?: number }
+> = {
+  // extras = AI image generation, the real-browser test and the live-site AI.
+  // maxAgents caps how many agents one run may hire; unset = the MAX_AGENTS env (longer runs)
+  free: { messagesPerDay: 2, extrasEverywhere: false, maxAgents: 40 },
   pro: { messagesPerDay: 100, extrasEverywhere: true },
   team: { messagesPerDay: 500, extrasEverywhere: true }
 };

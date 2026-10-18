@@ -159,6 +159,7 @@ export function ProjectsPage() {
             <span className="hidden text-right text-xs sm:block">
               <span className="block text-white/80">{user.name}</span>
               <span className="block text-white/35">{user.email}</span>
+              {user.phoneVerified && <span className="block text-white/35">{user.phone}</span>}
             </span>
             <span className="grid size-9 place-items-center rounded-full bg-white/10 text-sm font-medium text-white">
               {user.name?.[0]?.toUpperCase()}

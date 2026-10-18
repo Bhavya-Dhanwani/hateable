@@ -105,7 +105,7 @@ const PLANS = [
     blurb: 'For trying it out and building things you only half hate.',
     features: [
       '2 projects: 2 frontend, 2 backend, 1 of each, or 1 full‑stack',
-      '2 AI messages every 24 hours, metered by tokens',
+      '2 AI messages every 24 hours, runs of up to 40 agents',
       'Custom domains',
       'GitHub push and pull',
       'Image generation in 1 project',
@@ -124,10 +124,9 @@ const PLANS = [
     features: [
       'Everything in Hobby',
       '10 projects, any stack',
-      'Much higher AI usage limits, longer runs',
+      '100 AI messages a day, longer runs (up to 200 agents)',
       'Always-on deployments',
-      'Image generation, real-browser testing and live-site AI in every project',
-      'Priority build and deploy queue'
+      'Image generation, real-browser testing and live-site AI in every project'
     ],
     cta: 'Go Pro',
     featured: true
@@ -142,7 +141,7 @@ const PLANS = [
       'Everything in Pro',
       'Shared workspaces',
       'Roles and access control',
-      'Highest usage limits, pooled across the team',
+      '500 AI messages a day, pooled across the team',
       'Usage analytics per member and project',
       'Priority support'
     ],

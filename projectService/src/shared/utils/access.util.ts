@@ -12,6 +12,8 @@ export type TokenUser = {
   userId?: string;
   _id?: string;
   plan?: unknown;
+  // set by authService once the user's phone is verified (one number per account)
+  phoneVerified?: boolean;
   workspaces?: Array<{ id: string; role: Role }>;
 };
 

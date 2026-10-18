@@ -30,7 +30,14 @@ const envSchema = z.object({
   GOOGLE_REDIRECT_URI: z.string().url().default(envConstants.GOOGLE_REDIRECT_URI),
   FRONTEND_URL: z.string().url().default(envConstants.FRONTEND_URL),
   // shared key for the admin plan switch; unset means the endpoint is off
-  ADMIN_API_KEY: z.string().optional()
+  ADMIN_API_KEY: z.string().optional(),
+  // Truecaller mobile-web SDK app key (partnerKey); unset means phone verification is off
+  TRUECALLER_APP_KEY: z.string().optional(),
+  TRUECALLER_PARTNER_NAME: z.string().default('Hateable'),
+  // Telegram bot (from @BotFather) for phone verification; all three are needed to turn it on
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_BOT_USERNAME: z.string().optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional()
 });
 
 // parsing and validating environment variables

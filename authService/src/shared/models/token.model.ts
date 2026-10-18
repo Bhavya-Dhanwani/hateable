@@ -1,37 +1,41 @@
 // Importing modules
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
 // Defining the schema for the Token model
 const tokenSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: false
+  },
 
-    email: {
-        type: String,
-        required: false,
-    },
+  type: {
+    type: String,
+    required: true,
+    enum: ['otp', 'reset', 'invitation', 'truecaller', 'telegram']
+  },
 
-    type: {
-        type: String,
-        required: true,
-        enum: ['otp', 'reset', 'invitation']
-    },
+  // phone requests only: pending -> verified | conflict | rejected | failed
+  status: {
+    type: String,
+    required: false
+  },
 
-    value: {
-        type: String,
-        required: true,
-        unique: true
-    },
+  value: {
+    type: String,
+    required: true,
+    unique: true
+  },
 
-    expiresAt: {
-        type: Date,
-        required: true,
-        index: {
-            expires: 0
-        }
+  expiresAt: {
+    type: Date,
+    required: true,
+    index: {
+      expires: 0
     }
-
+  }
 });
 
 // Making the model for the Token schema
-const Token = mongoose.model("Token", tokenSchema);
+const Token = mongoose.model('Token', tokenSchema);
 
 export default Token;

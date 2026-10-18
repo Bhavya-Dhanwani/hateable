@@ -29,6 +29,7 @@ type RunCtx = {
   fileServerUrl: string;
   tree: Set<string>; // files that exist in the project
   agents: number;
+  maxAgents: number; // plan cap on agents hired in this run
   cancelled: boolean;
   emit: (e: AgentEvent) => void;
   images: ReturnType<typeof createImageResolver>; // stock photos + generated images, shared by the tree
@@ -109,7 +110,7 @@ async function fileServer(ctx: RunCtx, route: string, init?: RequestInit) {
 
 async function triage(s: S): Promise<Partial<S>> {
   const ctx = ctxOf(s);
-  if (++ctx.agents > env.MAX_AGENTS || s.depth >= env.MAX_DEPTH) {
+  if (++ctx.agents > ctx.maxAgents || s.depth >= env.MAX_DEPTH) {
     return { complexity: 'small', readFiles: [] };
   }
   const available = listSkills();
@@ -371,6 +372,7 @@ export async function runAgents(opts: {
   fileServerUrl: string;
   previewUrl?: string; // in-cluster preview origin; enables the browser check when Playwright MCP is set up
   extras?: boolean; // plan gate for AI image generation and the browser check (default on)
+  maxAgents?: number; // plan cap on agents per run (default MAX_AGENTS)
   emit: (e: AgentEvent) => void;
   signal?: AbortSignal;
 }): Promise<{ files: string[]; reports: string[] }> {
@@ -379,6 +381,7 @@ export async function runAgents(opts: {
     fileServerUrl: opts.fileServerUrl,
     tree: new Set(),
     agents: 0,
+    maxAgents: Math.min(opts.maxAgents ?? env.MAX_AGENTS, env.MAX_AGENTS),
     cancelled: false,
     emit: opts.emit,
     images: createImageResolver((message) => opts.emit({ path: 'Images', depth: 0, message }), {

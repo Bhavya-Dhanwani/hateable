@@ -57,6 +57,11 @@ class PodsController {
     const user = userOf(req);
     const userId = userIdOf(user);
 
+    // one verified phone per account keeps people from farming the free plan with extra accounts
+    if (!user.phoneVerified) {
+      throw new Forbidden('Verify your phone number before creating a project');
+    }
+
     // a shared project needs editor access to the workspace, and counts against its pool
     if (workspaceId && !atLeast(workspaceRole(user, workspaceId), 'editor')) {
       throw new Forbidden('You need editor access to create projects in this workspace');

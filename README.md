@@ -21,12 +21,13 @@ sleeps when nobody visits and wakes up on the next visitor.
 5. [The AI agents](#the-ai-agents)
 6. [Deployments](#deployments)
 7. [Terminal, logs and GitHub](#terminal-logs-and-github)
-8. [Running it locally](#running-it-locally)
-9. [Configuration](#configuration)
-10. [Testing and code quality](#testing-and-code-quality)
-11. [Troubleshooting](#troubleshooting)
-12. [Going to production](#going-to-production)
-13. [Security model](#security-model)
+8. [Plans, teams and verification](#plans-teams-and-verification)
+9. [Running it locally](#running-it-locally)
+10. [Configuration](#configuration)
+11. [Testing and code quality](#testing-and-code-quality)
+12. [Troubleshooting](#troubleshooting)
+13. [Going to production](#going-to-production)
+14. [Security model](#security-model)
 
 ---
 
@@ -40,6 +41,9 @@ sleeps when nobody visits and wakes up on the next visitor.
 | **Deploy in one click**  | `https://<project>.hateable.bhavyadhanwani.dev`, frozen as a snapshot, asleep after 15 idle minutes, woken by the next visitor behind a minimal loader.                              |
 | **Deployment dashboard** | Overview · Analytics (visitors, views, live now, referrers, devices…) · Logs (cleaned up) · Custom domains · Environment variables · an AI that explains what happened to your site. |
 | **GitHub**               | Connect once, push any project to a repo (created if missing) in one click; edits made on GitHub are pulled in before every AI run.                                                  |
+| **Teams**                | Shared workspaces with owner / admin / editor / viewer roles, e-mail invites, one AI allowance pooled across the team, and usage per member and project.                             |
+| **Plans**                | Hobby, Pro and Team, enforced in every service: project slots, AI messages, run size, always-on deploys, and where images, browser QA and the site AI are available.                 |
+| **Verified accounts**    | One tap in a Telegram bot verifies a new account (free, no SMS). One Telegram account per Hateable account keeps people from farming the free plan.                                  |
 
 ---
 
@@ -76,7 +80,7 @@ flowchart LR
 | Service                 | Folder                                        | What it does                                                                                                                                            |
 | ----------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **frontend**            | [`frontend/`](frontend)                       | React 19 + Vite + Tailwind v4. Landing, auth, projects, the workspace (chat, editor, preview, terminal, logs) and the deployment dashboard.             |
-| **authService**         | [`authService/`](authService)                 | Sign-up / login / Google login, OTP e-mail, access + refresh tokens (refresh in an httpOnly cookie).                                                    |
+| **authService**         | [`authService/`](authService)                 | Sign-up / login / Google login, access + refresh tokens (refresh in an httpOnly cookie), plans, Team workspaces, Telegram account verification.         |
 | **projectService**      | [`projectService/`](projectService)           | Projects and their pods, the preview/workspace/deployment proxy, idle reaper, deployments, analytics, logs, terminal WebSocket, custom domains, GitHub. |
 | **aiService**           | [`aiService/`](aiService)                     | Chat + the multi-agent system (LangGraph + Mistral), prompts and skills, browser QA (Playwright MCP), images, the site AI.                              |
 | **express-file-server** | [`express-file-server/`](express-file-server) | Runs **inside** every project pod: read/write/delete files, the file tree, and `/exec` for running commands.                                            |
@@ -224,7 +228,8 @@ is in **[projectService/DEPLOYMENTS.md](projectService/DEPLOYMENTS.md)**.
 - **Terminal.** The workspace's Terminal panel is xterm.js over a WebSocket to projectService,
   bridged to a Kubernetes `exec` TTY in the project pod (the file-server container, which sees the
   whole project and has node + npm). The first message must authenticate, and only the project's
-  owner gets a shell.
+  owner (or, in a Team workspace, an editor and up) gets a shell. Agents run their own commands
+  (`npm install …`) through the file server's `/exec`, shown step by step in the chat.
 - **Dev logs.** The Logs panel streams the dev server's raw output (server-sent events from the
   pod's log stream). It's deliberately unfiltered, like your own terminal.
 - **GitHub.** Connect through an OAuth App. The token is stored encrypted and the flow is bound to
@@ -232,6 +237,58 @@ is in **[projectService/DEPLOYMENTS.md](projectService/DEPLOYMENTS.md)**.
   GitHub's Git Data API (no git binary, and the token never enters the user's pod), creating the
   repo as private if it doesn't exist. **Pull** runs before every AI run and applies only the
   files changed on GitHub since the last sync.
+
+---
+
+## Plans, teams and verification
+
+The plan lives on the user in authService and travels in the access token, so every service
+enforces its own part without a lookup. Limits are in
+[`projectService/src/shared/constants/plans.constants.ts`](projectService/src/shared/constants/plans.constants.ts) and
+[`aiService/src/shared/services/plan.service.ts`](aiService/src/shared/services/plan.service.ts):
+
+|                                       | Hobby (free)                              | Pro           | Team (per workspace) |
+| ------------------------------------- | ----------------------------------------- | ------------- | -------------------- |
+| Projects                              | 2 slots (a full-stack project takes both) | 10            | 10, shared           |
+| AI messages (rolling 24 h)            | 2                                         | 100           | 500, pooled          |
+| Agents per AI run                     | 40                                        | 200           | 200                  |
+| Image generation, browser QA, site AI | first project only                        | every project | every project        |
+| Deployments                           | sleep after 15 idle minutes               | always on     | always on            |
+| Custom domains, GitHub                | yes                                       | yes           | yes                  |
+
+There's no checkout yet: switch a user's plan with the admin endpoint (the new plan reaches their
+token on its next refresh):
+
+```bash
+curl -X PATCH http://localhost:5173/api/auth/admin/plan -H "x-admin-key: <ADMIN_API_KEY>" -H "content-type: application/json" -d "{\"email\":\"me@example.com\",\"plan\":\"pro\"}"
+```
+
+**Team workspaces** (Team plan) hold shared projects. Members are invited by e-mail and accept
+from their projects page. Roles: **owner** and **admin** manage members, **editor** builds (chat,
+editor, terminal, deploy), **viewer** looks. Workspace projects draw on the workspace's pooled
+allowance, and the members page shows usage per member and project.
+
+**Verification.** After sign-up, every account has to verify before it can use the app, and
+projectService refuses to create a project for an unverified account:
+
+```mermaid
+sequenceDiagram
+  participant W as Hateable (browser)
+  participant A as authService
+  participant T as Telegram bot
+  W->>A: POST /api/auth/phone/telegram
+  A-->>W: t.me/<bot>?start=<one-time code>
+  W->>T: user opens the bot, taps Start
+  T->>A: webhook: "/start <code>" from Telegram user id
+  A->>A: link that Telegram account (unique) and mark verified
+  W->>A: GET /api/auth/phone/<code> (polling)
+  A-->>W: verified, or 409 if that Telegram account is on another account
+```
+
+Every Telegram account sits on its own phone number, so one Telegram account per Hateable account
+gives the "one number, one account" rule without reading the number (and without Telegram's
+share-your-number warning). It works on phones and computers and costs nothing. A Truecaller
+backend (`/api/auth/phone/truecaller`) is also there for Android one-tap, but the UI uses Telegram.
 
 ---
 
@@ -281,6 +338,11 @@ type: Opaque
 stringData:
   ACCESS_TOKEN_SECRET: <long random string>
   REFRESH_TOKEN_SECRET: <another long random string>
+  ADMIN_API_KEY: <long random string> # optional: enables the admin plan switch
+  # account verification (required before creating projects): a bot from @BotFather
+  TELEGRAM_BOT_TOKEN: '<bot token>'
+  TELEGRAM_BOT_USERNAME: <bot username, without @>
+  TELEGRAM_WEBHOOK_SECRET: <long random string>
 ---
 apiVersion: v1
 kind: Secret
@@ -313,6 +375,14 @@ stringData:
   GITHUB_CLIENT_ID: <client id>
   GITHUB_CLIENT_SECRET: <client secret>
   TOKEN_ENCRYPTION_KEY: <long random string>
+```
+
+Telegram has to reach the bot webhook over public HTTPS. Locally, run
+`cloudflared tunnel --url http://localhost:5173 --http-host-header localhost`, then register the
+URL it prints (again whenever it changes):
+
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" --data-urlencode "url=<tunnel url>/api/auth/phone/telegram/webhook" --data-urlencode "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
 ```
 
 ### 3. Storage (once per cluster)
@@ -348,35 +418,47 @@ Browsers resolve `*.localhost` to your machine, so no hosts-file changes are nee
 
 Most settings have working defaults. The ones you'll actually touch:
 
-| Service        | Variable                                      | Default                          | Purpose                                                       |
-| -------------- | --------------------------------------------- | -------------------------------- | ------------------------------------------------------------- |
-| projectService | `DEPLOY_DOMAIN`                               | `hateable.localhost`             | deployments are `<slug>.<DEPLOY_DOMAIN>`                      |
-|                | `DEPLOY_PROTOCOL`                             | `http`                           | `https` in production                                         |
-|                | `DEPLOY_IDLE_TTL_MS`                          | `900000`                         | how long a site stays awake without visitors                  |
-|                | `DEPLOY_INGRESS_IP`                           |                                  | shown as the A record for bare custom domains                 |
-|                | `APP_URL`                                     | `http://localhost:5173`          | the frontend, for OAuth callbacks and links                   |
-|                | `PREVIEW_IDLE_TTL_MS`                         | `600000`                         | how long an unused workspace pod lives                        |
-|                | `GITHUB_CLIENT_ID` / `_SECRET`                |                                  | enables GitHub connect                                        |
-|                | `TOKEN_ENCRYPTION_KEY`                        | dev value                        | encrypts GitHub tokens and env vars; **set it in production** |
-| aiService      | `AGENT_SYSTEM_V2`                             | `false` (`true` in k8s)          | multi-agent system vs. a single tool-calling agent            |
-|                | `MISTRAL_MODEL`                               | `mistral-large-latest`           | model for every agent                                         |
-|                | `MIN_SCORE` / `MAX_REVIEW_ROUNDS`             | `9` / `4`                        | review bar and how many tries                                 |
-|                | `MAX_DEPTH` / `MAX_AGENTS`                    | `4` / `200`                      | how deep and wide the agent tree may grow                     |
-|                | `PLAYWRIGHT_MCP_URL`                          | (set in k8s)                     | enables browser QA; empty disables it                         |
-|                | `MAX_BROWSER_FIX_ROUNDS`                      | `1`                              | fix passes after browser QA finds issues                      |
-|                | `UNSPLASH_ACCESS_KEY` / `REPLICATE_API_TOKEN` |                                  | stock / generated images                                      |
-|                | `IMAGE_MODEL`                                 | `black-forest-labs/flux-schnell` | Replicate model for generated images                          |
-| frontend       | `VITE_PREVIEW_PORT`                           | `8088`                           | port added to preview/deploy links; empty in production       |
+| Service        | Variable                                                       | Default                          | Purpose                                                       |
+| -------------- | -------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------- |
+| authService    | `TELEGRAM_BOT_TOKEN` / `_USERNAME` / `TELEGRAM_WEBHOOK_SECRET` |                                  | account verification bot; all three turn it on                |
+|                | `ADMIN_API_KEY`                                                |                                  | enables `PATCH /api/auth/admin/plan`                          |
+|                | `TRUECALLER_APP_KEY`                                           |                                  | optional Truecaller verification backend                      |
+| projectService | `DEPLOY_DOMAIN`                                                | `hateable.localhost`             | deployments are `<slug>.<DEPLOY_DOMAIN>`                      |
+|                | `DEPLOY_PROTOCOL`                                              | `http`                           | `https` in production                                         |
+|                | `DEPLOY_IDLE_TTL_MS`                                           | `900000`                         | how long a site stays awake without visitors                  |
+|                | `DEPLOY_INGRESS_IP`                                            |                                  | shown as the A record for bare custom domains                 |
+|                | `APP_URL`                                                      | `http://localhost:5173`          | the frontend, for OAuth callbacks and links                   |
+|                | `PREVIEW_IDLE_TTL_MS`                                          | `600000`                         | how long an unused workspace pod lives                        |
+|                | `GITHUB_CLIENT_ID` / `_SECRET`                                 |                                  | enables GitHub connect                                        |
+|                | `TOKEN_ENCRYPTION_KEY`                                         | dev value                        | encrypts GitHub tokens and env vars; **set it in production** |
+| aiService      | `AGENT_SYSTEM_V2`                                              | `false` (`true` in k8s)          | multi-agent system vs. a single tool-calling agent            |
+|                | `MISTRAL_MODEL`                                                | `mistral-large-latest`           | model for every agent                                         |
+|                | `MIN_SCORE` / `MAX_REVIEW_ROUNDS`                              | `9` / `4`                        | review bar and how many tries                                 |
+|                | `MAX_DEPTH` / `MAX_AGENTS`                                     | `4` / `200`                      | how deep and wide the agent tree may grow                     |
+|                | `PLAYWRIGHT_MCP_URL`                                           | (set in k8s)                     | enables browser QA; empty disables it                         |
+|                | `MAX_BROWSER_FIX_ROUNDS`                                       | `1`                              | fix passes after browser QA finds issues                      |
+|                | `UNSPLASH_ACCESS_KEY` / `REPLICATE_API_TOKEN`                  |                                  | stock / generated images                                      |
+|                | `IMAGE_MODEL`                                                  | `black-forest-labs/flux-schnell` | Replicate model for generated images                          |
+| frontend       | `VITE_PREVIEW_PORT`                                            | `8088`                           | port added to preview/deploy links; empty in production       |
 
 ---
 
 ## Testing and code quality
 
 ```bash
-pnpm --filter projectservice test     # slugs, user agents, log optimizer, encryption, env vars, domains
-pnpm --filter aiservice test          # key pool, prompts & skills, image tokens
+pnpm --filter authservice test        # health
+pnpm --filter projectservice test     # slugs, user agents, log optimizer, encryption, env vars, domains, access, plans
+pnpm --filter aiservice test          # key pool, prompts & skills, image tokens, plans and usage
 node --test frontend/src/utils/dotenv.test.js
 pnpm --filter frontend lint
+```
+
+Account verification has an end-to-end check against a real Mongo, with Telegram stubbed
+(verify, 409 on a reused Telegram account, used links, a bad webhook secret):
+
+```bash
+kubectl port-forward svc/mongo-service 27018:27017
+cd authService && MONGO_URI=mongodb://127.0.0.1:27018/auth npx tsx scripts/phone.check.ts
 ```
 
 Every commit runs a Husky pre-commit hook: **secretlint**, **eslint + prettier** on staged files,
@@ -420,7 +502,11 @@ shared DAOs, errors and responses, comments that explain _why_, and Prettier (si
   fenced in by a NetworkPolicy. Don't expose `express-file-server` outside the cluster: it can
   write files and run commands by design.
 - **Auth.** Short-lived access tokens in memory, plus an httpOnly, host-only refresh cookie. Every
-  project, terminal, log, deployment, domain and GitHub endpoint checks ownership.
+  project, terminal, log, deployment, domain and GitHub endpoint checks ownership, or the caller's
+  role in the project's Team workspace.
+- **Verified accounts.** One Telegram account per Hateable account, enforced by a unique index.
+  The bot webhook is authenticated with Telegram's secret-token header, and verification links
+  are random, single-use and expire after 10 minutes.
 - **Secrets at rest.** GitHub tokens and deployment env vars are AES-256-GCM encrypted. Env vars
   are never returned by queries unless explicitly selected.
 - **OAuth.** GitHub sign-in uses a signed state plus a browser-bound nonce cookie, so a link

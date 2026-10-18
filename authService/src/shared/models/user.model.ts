@@ -47,6 +47,27 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: PLANS,
     default: 'free'
+  },
+
+  // E.164 number verified via Truecaller; unique so one number belongs to one account
+  phone: {
+    type: String,
+    unique: true,
+    sparse: true,
+    match: [/^\+[1-9]\d{7,14}$/, 'Phone must be in E.164 format']
+  },
+
+  // Telegram account the user verified with (one per account); each sits on its own phone number
+  telegramId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+
+  // true once verified by Telegram or Truecaller; projectService requires it to create projects
+  phoneVerified: {
+    type: Boolean,
+    default: false
   }
 });
 

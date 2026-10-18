@@ -15,7 +15,12 @@ import {
 import BadRequest from '../../shared/errors/BadRequest.error.js';
 import Unauthorized from '../../shared/errors/Unauthorized.error.js';
 import { assertProjectAccess, resolveProject } from './utils/project.util.js';
-import { extrasAllowed, takeMessage, usagePool } from '../../shared/services/plan.service.js';
+import {
+  AI_LIMITS,
+  extrasAllowed,
+  takeMessage,
+  usagePool
+} from '../../shared/services/plan.service.js';
 import { resolveConversation, generateAndSaveTitle } from './utils/conversation.util.js';
 import {
   saveUserMessage,
@@ -201,6 +206,7 @@ class ChatController {
           // the browser check opens the same preview the user sees, from inside the cluster
           previewUrl: project.serviceName ? `http://${project.serviceName}` : undefined,
           extras,
+          maxAgents: AI_LIMITS[pool.plan].maxAgents,
           signal: abort.signal,
           emit: (e) => send('agent', e)
         });

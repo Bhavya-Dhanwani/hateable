@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useParams } from 'react-router';
 import { useAuth } from './auth/auth-context.js';
 import { LoadingScreen } from './components/LoadingScreen.jsx';
+import { PhoneOnboarding } from './components/VerifyPhone.jsx';
 import { AnalyticsPage } from './pages/deployment/AnalyticsPage.jsx';
 import { DeploymentLayout } from './pages/deployment/DeploymentLayout.jsx';
 import { DomainsPage } from './pages/deployment/DomainsPage.jsx';
@@ -20,7 +21,9 @@ function OldAnalyticsRedirect() {
 function ProtectedRoute() {
   const { user, isRestoring } = useAuth();
   if (isRestoring) return <LoadingScreen label="Restoring your session" />;
-  return user ? <Outlet /> : <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  // onboarding: every account verifies a phone number (one per account) before using the app
+  return user.phoneVerified ? <Outlet /> : <PhoneOnboarding />;
 }
 
 function GuestRoute() {

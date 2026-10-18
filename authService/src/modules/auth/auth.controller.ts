@@ -30,7 +30,14 @@ import {
 } from '../../shared/utils/googleAuth.util.js';
 import sendMail from '../../shared/utils/sendMail.util.js';
 import { generateOTPToken, generateResetPasswordToken } from '../../shared/utils/token.util.js';
-import { timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import Conflict from '../../shared/errors/Conflict.error.js';
+import {
+  buildTruecallerDeepLink,
+  fetchTruecallerPhone
+} from '../../shared/utils/truecaller.util.js';
+import { sendTelegramMessage, telegramLink } from '../../shared/utils/telegram.util.js';
+import logger from '../../shared/config/logger.config.js';
 import { PLANS, Plan } from '../../shared/models/user.model.js';
 import sanitizeUser from '../../shared/sanitizers/user.sanitizer.js';
 
@@ -156,6 +163,172 @@ class AuthController {
     await user.save();
 
     return Ok(res, `Plan set to ${plan}`, { user: sanitizeUser(user.toObject()) });
+  };
+
+  // a single-use, 10 minute phone verification request; the nonce is URL and Telegram-payload safe
+  private startPhoneRequest = async (
+    email: string | undefined,
+    type: 'truecaller' | 'telegram'
+  ) => {
+    const requestNonce = randomBytes(24).toString('base64url');
+    await this.tokenDao.createToken({
+      email,
+      type,
+      value: requestNonce,
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+    });
+    return requestNonce;
+  };
+
+  // start Telegram verification: the link opens our bot with "/start <nonce>"
+  telegramStart = async (req: AuthenticatedRequest, res: Response) => {
+    if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_BOT_USERNAME || !env.TELEGRAM_WEBHOOK_SECRET) {
+      throw new BadRequest('Verification with Telegram is not configured');
+    }
+    const requestNonce = await this.startPhoneRequest(req.user?.email, 'telegram');
+    return Created(res, 'Telegram verification started', {
+      requestNonce,
+      link: telegramLink(requestNonce)
+    });
+  };
+
+  // Telegram posts bot updates here (public, authenticated by the webhook secret header).
+  // "/start <nonce>" links the sender's Telegram account to the Hateable account. Every Telegram
+  // account sits on its own phone number, so one Telegram account per Hateable account gives
+  // the same one-number-per-account rule without asking for the number (and Telegram's warning).
+  telegramWebhook = async (req: Request, res: Response) => {
+    const given = Buffer.from(String(req.headers['x-telegram-bot-api-secret-token'] || ''));
+    const expected = Buffer.from(env.TELEGRAM_WEBHOOK_SECRET || '');
+    if (!expected.length || given.length !== expected.length || !timingSafeEqual(given, expected)) {
+      throw new Unauthorized('Bad webhook secret');
+    }
+    Ok(res, 'Received'); // acknowledge first so Telegram doesn't redeliver while we reply
+
+    type TelegramMessage = {
+      chat: { id: number; type: string };
+      from?: { id: number; is_bot?: boolean };
+      text?: string;
+    };
+    const message = (req.body as { message?: TelegramMessage })?.message;
+    if (!message?.from || message.from.is_bot || message.chat.type !== 'private') return;
+    const chatId = message.chat.id;
+
+    try {
+      const nonce = message.text?.match(/^\/start ([A-Za-z0-9_-]{8,64})$/)?.[1];
+      if (!nonce) {
+        return await sendTelegramMessage(
+          chatId,
+          'Open the "Verify with Telegram" link on Hateable to verify your account.'
+        );
+      }
+
+      const request = await this.tokenDao.findTokenByValue(nonce);
+      if (!request || request.type !== 'telegram' || request.status !== 'pending') {
+        return await sendTelegramMessage(
+          chatId,
+          'This link has expired. Go back to Hateable and start again.'
+        );
+      }
+      try {
+        await this.userDao.setVerifiedTelegram(request.email!, String(message.from.id));
+        request.status = 'verified';
+      } catch (error) {
+        if (!(error instanceof Conflict)) throw error;
+        request.status = 'conflict';
+      }
+      await request.save();
+      await sendTelegramMessage(
+        chatId,
+        request.status === 'verified'
+          ? 'Verified! You can go back to Hateable now.'
+          : 'This Telegram account is already linked to another Hateable account.'
+      );
+    } catch (error) {
+      logger.error({ err: error }, 'Telegram webhook processing failed');
+    }
+  };
+
+  // start Truecaller phone verification: returns the deep link plus the nonce to poll with
+  truecallerStart = async (req: AuthenticatedRequest, res: Response) => {
+    if (!env.TRUECALLER_APP_KEY) {
+      throw new BadRequest('Phone verification with Truecaller is not configured');
+    }
+
+    const requestNonce = await this.startPhoneRequest(req.user?.email, 'truecaller');
+    return Created(res, 'Truecaller verification started', {
+      requestNonce,
+      deepLink: buildTruecallerDeepLink(requestNonce)
+    });
+  };
+
+  // Truecaller posts here (public): { requestId, status } or { requestId, accessToken, endpoint }.
+  // Truecaller expects a 2xx within 3s, so acknowledge first and fetch the profile after;
+  // the outcome is stored on the request for the status poll.
+  truecallerCallback = async (req: Request, res: Response) => {
+    const { requestId, status, accessToken, endpoint } = (req.body || {}) as Record<string, string>;
+    Ok(res, 'Received');
+
+    try {
+      const request = requestId ? await this.tokenDao.findTokenByValue(String(requestId)) : null;
+      if (!request || request.type !== 'truecaller' || request.status !== 'pending') return;
+
+      if (accessToken && endpoint) {
+        try {
+          const phone = await fetchTruecallerPhone(String(endpoint), String(accessToken));
+          await this.userDao.setVerifiedPhone(request.email!, phone);
+          request.status = 'verified';
+        } catch (error) {
+          request.status = error instanceof Conflict ? 'conflict' : 'failed';
+          logger.warn({ err: error }, 'Truecaller verification did not complete');
+        }
+      } else if (status === 'user_rejected') {
+        request.status = 'rejected';
+      } else {
+        return; // "flow_invoked" handshake: the 2xx above is all Truecaller needs
+      }
+      await request.save();
+    } catch (error) {
+      logger.error({ err: error }, 'Truecaller callback processing failed');
+    }
+  };
+
+  // frontend polls this (Telegram or Truecaller request) until it settles; 409 when the number
+  // belongs to another account
+  phoneStatus = async (req: AuthenticatedRequest, res: Response) => {
+    const request = await this.tokenDao.findTokenByValue(String(req.params.nonce));
+    if (
+      !request ||
+      !['telegram', 'truecaller'].includes(request.type) ||
+      request.email !== req.user?.email
+    ) {
+      throw new NotFound('Verification request not found or expired');
+    }
+    if (request.status === 'pending') {
+      return Ok(res, 'Waiting for verification', { status: 'pending' });
+    }
+
+    await this.tokenDao.deleteTokenByValue(request.value);
+    if (request.status === 'conflict') {
+      throw new Conflict(
+        request.type === 'telegram'
+          ? 'This Telegram account is already linked to another Hateable account'
+          : 'This phone number is already linked to another account'
+      );
+    }
+    if (request.status !== 'verified') {
+      throw new BadRequest(
+        request.status === 'rejected'
+          ? 'Verification was cancelled'
+          : 'Verification failed, please try again'
+      );
+    }
+
+    const user = await this.userDao.findUserByEmail(request.email!);
+    return Ok(res, 'Phone number verified', {
+      status: 'verified',
+      user: sanitizeUser(user?.toObject())
+    });
   };
 
   // refresh access token
