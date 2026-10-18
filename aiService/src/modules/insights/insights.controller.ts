@@ -1,7 +1,9 @@
 // Importing modules
 import { Request, Response } from 'express';
 import Forbidden from '../../shared/errors/Forbidden.error.js';
-import { extrasAllowed, planOf } from '../../shared/services/plan.service.js';
+import { extrasAllowed, usagePool } from '../../shared/services/plan.service.js';
+import ProjectDao from '../../shared/dao/project.dao.js';
+import { assertProjectAccess, resolveProject } from '../chat/utils/project.util.js';
 import { z } from 'zod';
 import { ask } from '../../shared/agents/llm.js';
 import { prompt } from '../../shared/agents/prompts.js';
@@ -57,6 +59,8 @@ function pickLogs(lines: LogLine[]) {
   return lines.filter((l) => keep.has(l));
 }
 
+const projectDao = new ProjectDao();
+
 // class to answer questions about a deployed site from its own logs and analytics
 class InsightsController {
   // ask the site AI a question about a deployment
@@ -72,10 +76,14 @@ class InsightsController {
       throw new BadRequest('projectId and question are required');
     }
 
-    // plan gate: on the free plan the site AI works in the user's first project only
+    // any member may ask about the live site; workspace projects run on the Team plan
     const user = (req as Request & { user?: { userId?: string; _id?: string; plan?: unknown } })
       .user;
-    const plan = planOf(user);
+    const project = await resolveProject(projectId, projectDao);
+    assertProjectAccess(user, project, 'viewer');
+
+    // plan gate: on the free plan the site AI works in the user's first project only
+    const { plan } = usagePool(user, project);
     if (!(await extrasAllowed(String(user?.userId || user?._id || ''), plan, projectId))) {
       throw new Forbidden(
         'On the Hobby plan, the live-site AI works in your first project only. Upgrade to Pro to use it everywhere.'

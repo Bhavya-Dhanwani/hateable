@@ -12,12 +12,16 @@ export const PROJECT_TYPES = [
 ];
 
 export const projectsApi = {
-  list: () => apiRequest('/api/projects').then((data) => data.projects),
+  // workspaceId: a Team workspace's shared projects; omitted: the caller's personal ones
+  list: (workspaceId) =>
+    apiRequest(
+      workspaceId ? `/api/projects?workspaceId=${encodeURIComponent(workspaceId)}` : '/api/projects'
+    ).then((data) => data.projects),
   get: (id) => apiRequest(`/api/projects/${id}`).then((data) => data.project),
-  create: (name, projectType) =>
+  create: (name, projectType, workspaceId) =>
     apiRequest('/api/projects', {
       method: 'POST',
-      body: JSON.stringify({ name, projectType })
+      body: JSON.stringify({ name, projectType, workspaceId: workspaceId || undefined })
     }).then((data) => data.project),
   launch: (id) => apiRequest(`/api/projects/${id}/launch`, { method: 'POST' })
 };

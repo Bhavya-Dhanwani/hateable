@@ -8,7 +8,7 @@
     "dev": "tsx watch server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "tsx src/shared/agents/keyPool.test.ts && tsx src/shared/agents/prompts.test.ts && tsx src/shared/services/image.test.ts",
+    "test": "tsx src/shared/agents/keyPool.test.ts && tsx src/shared/agents/prompts.test.ts && tsx src/shared/services/image.test.ts && tsx src/shared/services/plan.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

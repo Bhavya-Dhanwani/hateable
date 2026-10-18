@@ -3,9 +3,8 @@ import { Request, Response } from 'express';
 import { randomBytes } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import env from '../../shared/config/env.config.js';
-import Project from '../../shared/models/project.model.js';
+import { findProjectFor } from '../../shared/utils/access.util.js';
 import GithubAccount from '../../shared/models/githubAccount.model.js';
-import NotFound from '../../shared/errors/NotFound.error.js';
 import Forbidden from '../../shared/errors/Forbidden.error.js';
 import BadRequest from '../../shared/errors/BadRequest.error.js';
 import Unauthorized from '../../shared/errors/Unauthorized.error.js';
@@ -42,20 +41,8 @@ const WRITE_BATCH = 20;
 
 // class to handle the GitHub connection and pushing / pulling projects
 class GithubController {
-  // function to load a project and make sure the caller owns it
-  private findOwnedProject = async (req: Request) => {
-    const project = await Project.findById(req.params.projectId);
-
-    if (!project) {
-      throw new NotFound('Project not found');
-    }
-
-    if (project.userId !== currentUserId(req)) {
-      throw new Forbidden('You do not have permission to manage this project');
-    }
-
-    return project;
-  };
+  // function to load a project the caller may push and pull (editor and up)
+  private findOwnedProject = (req: Request) => findProjectFor(req, 'editor');
 
   // function to get the caller's GitHub token, or fail with a clear "connect first"
   private tokenOf = async (req: Request) => {

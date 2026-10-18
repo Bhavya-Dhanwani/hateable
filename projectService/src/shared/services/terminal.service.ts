@@ -9,6 +9,7 @@ import env from '../config/env.config.js';
 import logger from '../config/logger.config.js';
 import Project from '../models/project.model.js';
 import { recordActivity } from './activity.service.js';
+import { atLeast, projectRole, TokenUser, userIdOf } from '../utils/access.util.js';
 
 /**
  * Workspace terminal: browser (xterm.js) <-> WebSocket <-> k8s exec TTY in the project pod.
@@ -31,14 +32,11 @@ const exec = new k8s.Exec(kc);
 // the shape k8s.Exec looks for to forward terminal resizes (see isResizable in client-node)
 type ResizableOutput = PassThrough & { rows: number; columns: number };
 
-// function to read the user id out of an access token, null when it is invalid
-function userIdFrom(token: unknown) {
+// function to read the user out of an access token, null when it is invalid
+function userFrom(token: unknown) {
   try {
-    const payload = jwt.verify(String(token), env.ACCESS_TOKEN_SECRET) as {
-      userId?: string;
-      _id?: string;
-    };
-    return payload.userId || payload._id || null;
+    const payload = jwt.verify(String(token), env.ACCESS_TOKEN_SECRET) as TokenUser;
+    return userIdOf(payload) ? payload : null;
   } catch {
     return null;
   }
@@ -123,12 +121,14 @@ export function attachTerminalServer(server: Server) {
             cols?: number;
             rows?: number;
           };
-          const userId = msg.type === 'auth' ? userIdFrom(msg.token) : null;
-          if (!userId) return ws.close(4401, 'Invalid or expired access token');
+          const user = msg.type === 'auth' ? userFrom(msg.token) : null;
+          if (!user) return ws.close(4401, 'Invalid or expired access token');
 
-          // only the owner of the project gets a shell in its pod
+          // a shell can change anything in the pod: owner and workspace editors and up only
           const project = await Project.findById(projectId);
-          if (!project || project.userId !== userId) return ws.close(4403, 'Not your project');
+          if (!project || !atLeast(projectRole(user, project), 'editor')) {
+            return ws.close(4403, 'You need editor access to open a terminal');
+          }
           if (project.status !== 'running') return ws.close(4409, 'The project is not running');
 
           await openShell(ws, projectId, { cols: msg.cols || 80, rows: msg.rows || 24 });

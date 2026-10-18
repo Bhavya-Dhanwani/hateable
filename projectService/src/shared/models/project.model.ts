@@ -30,6 +30,12 @@ const projectSchema = new mongoose.Schema(
       type: String,
       required: false
     },
+    // the Team workspace the project is shared in, unset for personal projects
+    workspaceId: {
+      type: String,
+      required: false,
+      index: true
+    },
     podName: {
       type: String,
       required: false

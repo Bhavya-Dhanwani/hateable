@@ -14,8 +14,8 @@ import {
 } from '../../shared/services/redis.service.js';
 import BadRequest from '../../shared/errors/BadRequest.error.js';
 import Unauthorized from '../../shared/errors/Unauthorized.error.js';
-import { resolveProject } from './utils/project.util.js';
-import { extrasAllowed, planOf, takeMessage } from '../../shared/services/plan.service.js';
+import { assertProjectAccess, resolveProject } from './utils/project.util.js';
+import { extrasAllowed, takeMessage, usagePool } from '../../shared/services/plan.service.js';
 import { resolveConversation, generateAndSaveTitle } from './utils/conversation.util.js';
 import {
   saveUserMessage,
@@ -60,12 +60,15 @@ class ChatController {
 
     // 1. Resolve project
     const project = await resolveProject(projectId, this.projectDao);
+    // chatting changes the project's files: its owner or a workspace editor and up
+    assertProjectAccess(req.user, project, 'editor');
 
     // plan limits: one message off the rolling 24h allowance (429 when it's used up), and
-    // whether this project gets image generation and the browser test
-    const plan = planOf(req.user);
-    await takeMessage(userId.toString(), plan);
-    const extras = await extrasAllowed(userId.toString(), plan, projectId);
+    // whether this project gets image generation and the browser test. Workspace projects
+    // draw on the workspace's shared Team pool.
+    const pool = usagePool(req.user, project);
+    await takeMessage(pool, { userId: userId.toString(), projectId });
+    const extras = await extrasAllowed(userId.toString(), pool.plan, projectId);
     // the pod file server mounts its routes at the root (express-file-server/src/app/app.ts)
     let fileServerUrl = `http://${project.serviceName}:8000`;
 

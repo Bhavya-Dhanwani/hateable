@@ -20,14 +20,36 @@ export const planOf = (user: { plan?: unknown } | undefined): Plan =>
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Counts one AI message against the user's rolling 24 hour window, or throws a 429 saying
- * when the next one frees up. A sorted set of send times per user, trimmed on every call.
+ * Whose allowance a message comes out of: a workspace project draws on the workspace's shared
+ * Team pool whoever sends it, anything else on the sender's own plan.
+ */
+export function usagePool(
+  user: { userId?: unknown; _id?: unknown; plan?: unknown } | undefined,
+  project: { workspaceId?: string }
+): { key: string; plan: Plan } {
+  return project.workspaceId
+    ? { key: `ws:${project.workspaceId}`, plan: 'team' }
+    : { key: String(user?.userId || user?._id || ''), plan: planOf(user) };
+}
+
+// one entry per message in the pool's 24h window: "<sentAt>:<userId>:<projectId>:<nonce>"
+const entry = (now: number, userId: string, projectId: string) =>
+  `${now}:${userId}:${projectId}:${Math.random().toString(36).slice(2, 8)}`;
+
+/**
+ * Counts one AI message against the pool's rolling 24 hour window, or throws a 429 saying
+ * when the next one frees up. A sorted set of send times per pool, trimmed on every call; each
+ * entry names the sender and project, and an all-time per member/project tally feeds analytics.
  * ponytail: counts messages, not tokens; check-then-add, so two sends at the same instant can
  * both pass the last slot. Switch to summed token usage if message size starts to matter.
  */
-export async function takeMessage(userId: string, plan: Plan) {
+export async function takeMessage(
+  pool: { key: string; plan: Plan },
+  sender: { userId: string; projectId: string }
+) {
   const redis = getRedisClient();
-  const key = `ai-usage:${userId}`;
+  const key = `ai-usage:${pool.key}`;
+  const { plan } = pool;
   const now = Date.now();
   const limit = AI_LIMITS[plan].messagesPerDay;
 
@@ -41,12 +63,54 @@ export async function takeMessage(userId: string, plan: Plan) {
       429,
       plan === 'free'
         ? `The Hobby plan includes ${limit} AI messages every 24 hours. Your next one frees up in about ${hours}h, or upgrade to Pro for more.`
-        : `You've used all ${limit} AI messages for the last 24 hours. The next one frees up in about ${hours}h.`
+        : `${plan === 'team' ? 'Your team has' : "You've"} used all ${limit} AI messages for the last 24 hours. The next one frees up in about ${hours}h.`
     );
   }
 
-  await redis.zadd(key, now, `${now}-${Math.random().toString(36).slice(2, 8)}`);
+  await redis.zadd(key, now, entry(now, sender.userId, sender.projectId));
   await redis.pexpire(key, DAY_MS);
+  await redis.hincrby(`ai-usage-total:${pool.key}`, `${sender.userId}:${sender.projectId}`, 1);
+}
+
+/**
+ * Per member and project message counts for a pool: in the current 24h window and all time.
+ */
+export async function usageOf(pool: { key: string; plan: Plan }) {
+  const redis = getRedisClient();
+  const now = Date.now();
+  await redis.zremrangebyscore(`ai-usage:${pool.key}`, '-inf', now - DAY_MS);
+  const [window, totals] = await Promise.all([
+    redis.zrange(`ai-usage:${pool.key}`, '0', '-1'),
+    redis.hgetall(`ai-usage-total:${pool.key}`)
+  ]);
+  return {
+    limit: AI_LIMITS[pool.plan].messagesPerDay,
+    used: window.length,
+    rows: tally(window, totals)
+  };
+}
+
+// folds window entries and all-time totals into one row per member and project
+export function tally(window: string[], totals: Record<string, string>) {
+  const rows = new Map<
+    string,
+    { userId: string; projectId: string; last24h: number; total: number }
+  >();
+  const row = (userId: string, projectId: string) => {
+    const id = `${userId}:${projectId}`;
+    if (!rows.has(id)) rows.set(id, { userId, projectId, last24h: 0, total: 0 });
+    return rows.get(id)!;
+  };
+  for (const [id, count] of Object.entries(totals)) {
+    const [userId, projectId] = id.split(':');
+    row(userId, projectId).total = Number(count);
+  }
+  // entries from before the per-member format ("<sentAt>-<nonce>") count in `used` only
+  for (const e of window) {
+    const [, userId, projectId] = e.split(':');
+    if (userId && projectId) row(userId, projectId).last24h++;
+  }
+  return [...rows.values()].sort((a, b) => b.total - a.total);
 }
 
 /**
@@ -55,7 +119,9 @@ export async function takeMessage(userId: string, plan: Plan) {
  */
 export async function extrasAllowed(userId: string, plan: Plan, projectId: string) {
   if (AI_LIMITS[plan].extrasEverywhere) return true;
-  const first = await Project.findOne({ userId }, { projectId: 1 }).sort({ createdAt: 1 });
+  const first = await Project.findOne({ userId, workspaceId: null }, { projectId: 1 }).sort({
+    createdAt: 1
+  });
   // no synced projects yet (older data): don't punish the user for it
   return !first || first.projectId === projectId;
 }

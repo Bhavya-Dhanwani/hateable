@@ -9,7 +9,6 @@ import {
 import { CreatePodRequest } from './pods.type.js';
 import { recordActivity } from '../../shared/services/activity.service.js';
 import Project from '../../shared/models/project.model.js';
-import NotFound from '../../shared/errors/NotFound.error.js';
 import Forbidden from '../../shared/errors/Forbidden.error.js';
 import { publishMessage } from '../../shared/services/broker.service.js';
 import { Writable } from 'node:stream';
@@ -21,37 +20,55 @@ import {
   slotCost
 } from '../../shared/constants/plans.constants.js';
 
-const currentUserId = (req: Request) => {
-  const user = (req as Request & { user?: { userId?: string; _id?: string } }).user;
-  return user?.userId || user?._id || '';
-};
+import {
+  findProjectFor,
+  projectRole,
+  userIdOf,
+  userOf,
+  workspaceRole,
+  atLeast
+} from '../../shared/utils/access.util.js';
 
 class PodsController {
+  // ?workspaceId= lists a workspace's shared projects, otherwise the caller's personal ones
   listProjects = async (req: Request, res: Response) => {
-    const projects = await Project.find({ userId: currentUserId(req) }).sort({ updatedAt: -1 });
-    return ApiResponse(res, 200, 'Projects fetched successfully', { projects });
+    const user = userOf(req);
+    const workspaceId = typeof req.query.workspaceId === 'string' ? req.query.workspaceId : '';
+    if (workspaceId && !workspaceRole(user, workspaceId)) {
+      throw new Forbidden('You are not a member of this workspace');
+    }
+    const projects = await Project.find(
+      workspaceId ? { workspaceId } : { userId: userIdOf(user), workspaceId: null }
+    ).sort({ updatedAt: -1 });
+    return ApiResponse(res, 200, 'Projects fetched successfully', {
+      projects: projects.map((p) => ({ ...p.toObject(), role: projectRole(user, p) }))
+    });
   };
 
   getProject = async (req: Request, res: Response) => {
-    const project = await Project.findById(req.params.projectId);
-    if (!project) {
-      throw new NotFound('Project not found');
-    }
-    if (project.userId !== currentUserId(req)) {
-      throw new Forbidden('You do not have permission to view this project');
-    }
-    return ApiResponse(res, 200, 'Project fetched successfully', { project });
+    const project = await findProjectFor(req, 'viewer');
+    return ApiResponse(res, 200, 'Project fetched successfully', {
+      project: { ...project.toObject(), role: projectRole(userOf(req), project) }
+    });
   };
 
   createPod = async (req: CreatePodRequest, res: Response) => {
-    const { name: projectName, projectType } = req.body;
-    const user = (req as Request & { user?: { userId?: string; _id?: string } }).user;
-    const userId = user?.userId || user?._id || '';
+    const { name: projectName, projectType, workspaceId } = req.body;
+    const user = userOf(req);
+    const userId = userIdOf(user);
+
+    // a shared project needs editor access to the workspace, and counts against its pool
+    if (workspaceId && !atLeast(workspaceRole(user, workspaceId), 'editor')) {
+      throw new Forbidden('You need editor access to create projects in this workspace');
+    }
 
     // plan limit: every project takes slots (a full-stack one takes two on the free plan)
     // ponytail: count-then-create, two creates at the same instant can both squeeze in
-    const plan = planOf(user as { plan?: unknown });
-    const existing = await Project.find({ userId }, { projectType: 1 });
+    const plan = workspaceId ? 'team' : planOf(user);
+    const existing = await Project.find(
+      workspaceId ? { workspaceId } : { userId, workspaceId: null },
+      { projectType: 1 }
+    );
     const used = existing.reduce((n, p) => n + slotCost(plan, p.projectType), 0);
     const limit = PLAN_LIMITS[plan].projectSlots;
     if (used + slotCost(plan, projectType as string) > limit) {
@@ -66,7 +83,8 @@ class PodsController {
       status: 'starting',
       projectName: projectName as string,
       projectType: projectType as string,
-      userId: userId
+      userId: userId,
+      workspaceId: workspaceId || undefined
     });
     await project.save();
 
@@ -93,7 +111,8 @@ class PodsController {
           projectId: uniqueId,
           podName: podName,
           serviceName: serviceName,
-          userId: userId
+          userId: userId,
+          workspaceId: workspaceId || undefined
         })
       );
 
@@ -110,17 +129,8 @@ class PodsController {
 
   relaunchPod = async (req: Request, res: Response) => {
     const projectId = req.params.projectId as string;
-    const user = (req as Request & { user?: { userId?: string; _id?: string } }).user;
-    const currentUserId = user?.userId || user?._id || '';
-
-    const project = await Project.findById(projectId);
-    if (!project) {
-      throw new NotFound('Project not found');
-    }
-
-    if (project.userId !== currentUserId) {
-      throw new Forbidden('You do not have permission to relaunch this project');
-    }
+    // viewers open the preview too, so they may wake it
+    const project = await findProjectFor(req, 'viewer');
 
     // If the project is already running, just record activity and return
     if (project.status === 'running') {
@@ -179,13 +189,7 @@ class PodsController {
 
   // stream the raw output of the preview's app containers (server-sent events, one line per event)
   streamLogs = async (req: Request, res: Response) => {
-    const project = await Project.findById(req.params.projectId);
-    if (!project) {
-      throw new NotFound('Project not found');
-    }
-    if (project.userId !== currentUserId(req)) {
-      throw new Forbidden('You do not have permission to view these logs');
-    }
+    const project = await findProjectFor(req, 'viewer');
 
     // set before flushing so the compression filter sees the event-stream type
     res.setHeader('Content-Type', 'text/event-stream');

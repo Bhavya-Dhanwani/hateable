@@ -16,6 +16,7 @@ import { GitHubButton } from '../components/workspace/GitHubButton.jsx';
 import { LogsPane } from '../components/workspace/LogsPane.jsx';
 import { TerminalPane } from '../components/workspace/TerminalPane.jsx';
 import { withIngressPort } from '../utils/ingressUrl.js';
+import { RoleBadge } from '../components/RoleBadge.jsx';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -238,6 +239,9 @@ export function WorkspacePage() {
     );
   }
 
+  // viewers in a shared workspace can look but not change anything
+  const readOnly = project.role === 'viewer';
+
   return (
     <main className="h-svh overflow-hidden bg-ink text-white">
       <header className="flex h-12 items-center justify-between gap-3 border-b border-line bg-panel px-3">
@@ -297,24 +301,31 @@ export function WorkspacePage() {
               <span className="truncate">Files unavailable</span>
             </button>
           )}
+          {project.role && project.role !== 'owner' && <RoleBadge role={project.role} />}
           {[
             ['terminal', 'Terminal'],
             ['logs', 'Logs']
-          ].map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={panel === id}
-              onClick={() => setPanel((p) => (p === id ? null : id))}
-              className={`hidden h-8 rounded-full px-3 text-xs sm:block ${
-                panel === id ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-          <GitHubButton projectId={projectId} projectName={project.projectName} />
-          <DeployButton projectId={projectId} />
+          ]
+            .filter(([id]) => !readOnly || id !== 'terminal')
+            .map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={panel === id}
+                onClick={() => setPanel((p) => (p === id ? null : id))}
+                className={`hidden h-8 rounded-full px-3 text-xs sm:block ${
+                  panel === id ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          {!readOnly && (
+            <>
+              <GitHubButton projectId={projectId} projectName={project.projectName} />
+              <DeployButton projectId={projectId} />
+            </>
+          )}
         </div>
       </header>
 
@@ -331,6 +342,7 @@ export function WorkspacePage() {
                   onRefresh={refreshFiles}
                   onRelocate={relocateOpenPaths}
                   onRemove={removeOpenPaths}
+                  readOnly={readOnly}
                 />
                 <CodeEditorPane
                   projectId={projectId}
@@ -341,6 +353,7 @@ export function WorkspacePage() {
                   onChange={changeFile}
                   onSave={saveFile}
                   isSaving={isSaving}
+                  readOnly={readOnly}
                 />
               </div>
             ) : (
@@ -361,6 +374,7 @@ export function WorkspacePage() {
           projectId={projectId}
           initialPrompt={initialPrompt}
           onFilesChanged={onAgentEdit}
+          readOnly={readOnly}
         />
       </div>
     </main>

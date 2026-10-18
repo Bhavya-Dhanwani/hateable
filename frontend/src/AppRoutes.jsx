@@ -10,6 +10,7 @@ import { AuthPage } from './pages/AuthPage.jsx';
 import { LandingPage } from './pages/LandingPage.jsx';
 import { ProjectsPage } from './pages/ProjectsPage.jsx';
 import { WorkspacePage } from './pages/WorkspacePage.jsx';
+import { MembersPage } from './pages/MembersPage.jsx';
 
 function OldAnalyticsRedirect() {
   const { projectId } = useParams();
@@ -39,6 +40,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/:projectId" element={<WorkspacePage />} />
+        <Route path="/workspaces/:workspaceId" element={<MembersPage />} />
         <Route path="/projects/:projectId/deployment" element={<DeploymentLayout />}>
           <Route index element={<OverviewPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />

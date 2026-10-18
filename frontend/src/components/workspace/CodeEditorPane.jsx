@@ -95,11 +95,12 @@ export function CodeEditorPane({
   onClose,
   onChange,
   onSave,
-  isSaving
+  isSaving,
+  readOnly = false
 }) {
   const activeTab = tabs.find((tab) => tab.path === activePath);
   const saveActive = useEffectEvent(() => {
-    if (activeTab) onSave(activeTab.path);
+    if (activeTab && !readOnly) onSave(activeTab.path);
   });
 
   useEffect(() => {
@@ -155,7 +156,7 @@ export function CodeEditorPane({
             </button>
           ))}
         </div>
-        {activeTab && (activeTab.kind ?? 'text') === 'text' && (
+        {activeTab && !readOnly && (activeTab.kind ?? 'text') === 'text' && (
           <button
             className="flex w-11 shrink-0 items-center justify-center border-l border-white/8 text-zinc-500 hover:bg-white/5 hover:text-white disabled:opacity-40"
             type="button"
@@ -211,6 +212,7 @@ export function CodeEditorPane({
             }}
             onChange={(value) => onChange(activeTab.path, value || '')}
             options={{
+              readOnly,
               automaticLayout: true,
               fontFamily: 'JetBrains Mono Variable',
               fontLigatures: true,

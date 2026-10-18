@@ -1,10 +1,9 @@
 // Importing modules
 import { Request, Response } from 'express';
-import { PLAN_LIMITS, planOf } from '../../shared/constants/plans.constants.js';
-import Project from '../../shared/models/project.model.js';
+import { PLAN_LIMITS } from '../../shared/constants/plans.constants.js';
+import { findProjectFor, planFor, Role, userOf } from '../../shared/utils/access.util.js';
 import DeploymentDao from '../../shared/dao/deployment.dao.js';
 import NotFound from '../../shared/errors/NotFound.error.js';
-import Forbidden from '../../shared/errors/Forbidden.error.js';
 import BadRequest from '../../shared/errors/BadRequest.error.js';
 import Ok from '../../shared/responses/Ok.response.js';
 import Created from '../../shared/responses/Created.response.js';
@@ -55,20 +54,8 @@ class DeploymentsController {
     this.deploymentDao = new DeploymentDao();
   }
 
-  // function to load a project and make sure the caller owns it
-  private findOwnedProject = async (req: Request) => {
-    const project = await Project.findById(req.params.projectId);
-
-    if (!project) {
-      throw new NotFound('Project not found');
-    }
-
-    if (project.userId !== currentUserId(req)) {
-      throw new Forbidden('You do not have permission to manage this project');
-    }
-
-    return project;
-  };
+  // function to load a project the caller has at least `min` access to (viewers only read)
+  private findOwnedProject = (req: Request, min: Role = 'editor') => findProjectFor(req, min);
 
   // function to pick a free subdomain, "shululu" or "shululu-1a2b3" when another project owns it
   private pickSlug = async (projectName: string, projectId: string) => {
@@ -94,7 +81,7 @@ class DeploymentsController {
   // get the deployment of a project, null when it was never deployed
   getDeployment = async (req: Request, res: Response) => {
     // checking the project belongs to the user
-    const project = await this.findOwnedProject(req);
+    const project = await this.findOwnedProject(req, 'viewer');
 
     // finding the deployment using the deployment dao
     const deployment = await this.deploymentDao.findByProjectId(project._id.toString());
@@ -129,7 +116,7 @@ class DeploymentsController {
       slug,
       userId: currentUserId(req),
       projectType: project.projectType,
-      alwaysOn: PLAN_LIMITS[planOf((req as Request & { user?: { plan?: unknown } }).user)].alwaysOn
+      alwaysOn: PLAN_LIMITS[planFor(userOf(req), project)].alwaysOn
     });
 
     // holding the 15 minute idle window, then (re)starting the pod on the new snapshot
@@ -191,8 +178,8 @@ class DeploymentsController {
   });
 
   // function to load the deployment of a project the caller owns
-  private findOwnedDeployment = async (req: Request) => {
-    const project = await this.findOwnedProject(req);
+  private findOwnedDeployment = async (req: Request, min: Role = 'editor') => {
+    const project = await this.findOwnedProject(req, min);
     const deployment = await this.deploymentDao.findByProjectId(project._id.toString());
 
     if (!deployment) {
@@ -204,7 +191,7 @@ class DeploymentsController {
 
   // get the custom domains of a deployment
   listDomains = async (req: Request, res: Response) => {
-    const deployment = await this.findOwnedDeployment(req);
+    const deployment = await this.findOwnedDeployment(req, 'viewer');
     const domains = await CustomDomain.find({ slug: deployment.slug }).sort({ createdAt: 1 });
 
     return Ok(res, 'Domains fetched successfully', { domains: domains.map(this.presentDomain) });
@@ -346,7 +333,7 @@ class DeploymentsController {
   // get the optimized logs of a deployment: app output (live or last run) + lifecycle events
   getLogs = async (req: Request, res: Response) => {
     // checking the project belongs to the user
-    const project = await this.findOwnedProject(req);
+    const project = await this.findOwnedProject(req, 'viewer');
 
     // finding the deployment using the deployment dao
     const deployment = await this.deploymentDao.findByProjectId(project._id.toString());
@@ -369,7 +356,7 @@ class DeploymentsController {
   // get the visitor analytics of a deployment
   getAnalytics = async (req: Request, res: Response) => {
     // checking the project belongs to the user
-    const project = await this.findOwnedProject(req);
+    const project = await this.findOwnedProject(req, 'viewer');
 
     // finding the deployment using the deployment dao
     const deployment = await this.deploymentDao.findByProjectId(project._id.toString());

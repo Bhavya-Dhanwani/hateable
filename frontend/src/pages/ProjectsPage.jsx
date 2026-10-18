@@ -1,8 +1,11 @@
 import { motion } from 'motion/react';
-import { ArrowUpRight, LogOut, Plus } from 'lucide-react';
+import { ArrowUpRight, LogOut, Plus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { projectsApi } from '../api/projects.js';
+import { authApi } from '../api/auth.js';
+import { selectedWorkspace, workspacesApi } from '../api/workspaces.js';
+import { RoleBadge } from '../components/RoleBadge.jsx';
 import { useAuth } from '../auth/auth-context.js';
 import HeroGlow from '../components/bits/HeroGlow.jsx';
 import { useHeartbreak } from '../components/heartbreak-context.js';
@@ -28,7 +31,7 @@ const timeAgo = (value) => {
 };
 
 export function ProjectsPage() {
-  const { user, logout } = useAuth();
+  const { user, setUser, logout } = useAuth();
   const { go } = useHeartbreak();
   const navigate = useNavigate();
   const [projects, setProjects] = useState(null);
@@ -37,15 +40,67 @@ export function ProjectsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(Boolean(pending));
   const [busy, setBusy] = useState(false);
 
+  // Team workspaces: the one shown ('' = personal), the caller's workspaces and pending invites
+  const [workspaceId, setWorkspaceId] = useState(selectedWorkspace.get);
+  const [teams, setTeams] = useState({ workspaces: [], invites: [] });
+  const [newTeamName, setNewTeamName] = useState(null);
+  const workspace = teams.workspaces.find((w) => w.id === workspaceId);
+  // a workspace the caller left or lost access to falls back to personal projects
+  const shownId = workspace ? workspaceId : '';
+
+  const loadTeams = () =>
+    workspacesApi
+      .list()
+      .then(setTeams)
+      .catch(() => {});
+  useEffect(() => {
+    loadTeams();
+  }, []);
+
   useEffect(() => {
     projectsApi
-      .list()
+      .list(shownId)
       .then(setProjects)
       .catch((e) => {
         setError(e.message);
         setProjects([]);
       });
-  }, []);
+  }, [shownId]);
+
+  function pick(id) {
+    if (id !== shownId) setProjects(null);
+    selectedWorkspace.set(id);
+    setWorkspaceId(id);
+    setError('');
+  }
+
+  // membership reaches the access token on refresh: refresh before showing the workspace
+  async function joinAndShow(id) {
+    const session = await authApi.refresh();
+    setUser(session.user);
+    await loadTeams();
+    pick(id);
+  }
+
+  async function createTeam(event) {
+    event.preventDefault();
+    try {
+      const { workspace: created } = await workspacesApi.create(newTeamName.trim());
+      setNewTeamName(null);
+      await joinAndShow(created._id);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function accept(id) {
+    try {
+      await workspacesApi.accept(id);
+      await joinAndShow(id);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
 
   const [createError, setCreateError] = useState('');
 
@@ -54,7 +109,7 @@ export function ProjectsPage() {
     setBusy(true);
     setCreateError('');
     try {
-      const project = await projectsApi.create(name, projectType);
+      const project = await projectsApi.create(name, projectType, shownId);
       navigate(`/projects/${project._id}`, { state: { project, initialPrompt: pending?.prompt } });
     } catch (e) {
       setCreateError(e.message);
@@ -69,9 +124,37 @@ export function ProjectsPage() {
       <HeroGlow className="absolute -top-[22rem] left-1/2 -z-10 h-[38rem] w-[min(150vw,70rem)] -translate-x-1/2 opacity-60" />
       <header className="relative z-10 border-b border-line">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-          <Link to="/">
-            <Logo size={24} />
-          </Link>
+          <div className="flex min-w-0 items-center gap-3">
+            <Link to="/">
+              <Logo size={24} />
+            </Link>
+            {(teams.workspaces.length > 0 || user.plan === 'team') && (
+              <select
+                value={shownId}
+                onChange={(e) =>
+                  e.target.value === '+' ? setNewTeamName('') : pick(e.target.value)
+                }
+                aria-label="Workspace"
+                className="h-9 max-w-44 truncate rounded-full border border-line bg-panel px-3 text-sm text-white outline-none focus:border-white/30"
+              >
+                <option value="">Personal</option>
+                {teams.workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+                {user.plan === 'team' && <option value="+">+ New workspace</option>}
+              </select>
+            )}
+            {workspace && (
+              <Link
+                to={`/workspaces/${workspace.id}`}
+                className="flex h-9 items-center gap-1.5 rounded-full border border-line px-3 text-xs text-white/60 transition hover:bg-white/5 hover:text-white"
+              >
+                <Users className="size-3.5" /> Members
+              </Link>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <span className="hidden text-right text-xs sm:block">
               <span className="block text-white/80">{user.name}</span>
@@ -100,17 +183,66 @@ export function ProjectsPage() {
               Hey {firstName}, what are we building?
             </h1>
             <p className="mt-2 text-white/45">
-              Pick up where you left off, or start something new.
+              {workspace
+                ? `Shared projects in ${workspace.name}.`
+                : 'Pick up where you left off, or start something new.'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsCreateOpen(true)}
-            className="flex h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium bg-white text-black hover:bg-white/90 transition active:scale-95"
-          >
-            <Plus className="size-4" /> New project
-          </button>
+          {workspace?.role !== 'viewer' && (
+            <button
+              type="button"
+              onClick={() => setIsCreateOpen(true)}
+              className="flex h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium bg-white text-black hover:bg-white/90 transition active:scale-95"
+            >
+              <Plus className="size-4" /> New project
+            </button>
+          )}
         </div>
+
+        {newTeamName !== null && (
+          <form onSubmit={createTeam} className="mt-6 flex flex-wrap items-center gap-2">
+            <input
+              autoFocus
+              value={newTeamName}
+              onChange={(e) => setNewTeamName(e.target.value)}
+              placeholder="Workspace name"
+              aria-label="Workspace name"
+              className="h-10 min-w-0 flex-1 rounded-full border border-line bg-panel px-4 text-sm text-white outline-none placeholder:text-white/30 focus:border-white/30 sm:max-w-xs"
+            />
+            <button
+              type="submit"
+              disabled={!newTeamName.trim()}
+              className="h-10 rounded-full bg-white px-4 text-sm font-medium text-black disabled:opacity-40"
+            >
+              Create workspace
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewTeamName(null)}
+              className="h-10 rounded-full px-3 text-sm text-white/50 hover:text-white"
+            >
+              Cancel
+            </button>
+          </form>
+        )}
+
+        {teams.invites.map((invite) => (
+          <div
+            key={invite.id}
+            className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-panel px-4 py-3 text-sm"
+          >
+            <span className="text-white/70">
+              You're invited to <b className="text-white">{invite.name}</b> as {invite.role}.
+            </span>
+            <button
+              type="button"
+              onClick={() => accept(invite.id)}
+              className="h-8 rounded-full bg-white px-4 text-xs font-medium text-black hover:bg-white/90"
+            >
+              Accept
+            </button>
+          </div>
+        ))}
 
         {error && (
           <p
@@ -127,7 +259,7 @@ export function ProjectsPage() {
               <div key={i} className="h-60 animate-pulse rounded-2xl border border-line bg-panel" />
             ))}
 
-          {projects?.length === 0 && (
+          {projects?.length === 0 && workspace?.role !== 'viewer' && (
             <button
               type="button"
               onClick={() => setIsCreateOpen(true)}
@@ -166,8 +298,11 @@ export function ProjectsPage() {
                   </div>
                   <div className="p-5">
                     <div className="flex items-start justify-between gap-3">
-                      <h2 className="truncate font-medium text-white">
-                        {project.projectName || 'Untitled'}
+                      <h2 className="flex min-w-0 items-center gap-2 font-medium text-white">
+                        <span className="truncate">{project.projectName || 'Untitled'}</span>
+                        {project.role && project.role !== 'owner' && (
+                          <RoleBadge role={project.role} />
+                        )}
                       </h2>
                       <ArrowUpRight className="size-4 shrink-0 text-white/30 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-white" />
                     </div>

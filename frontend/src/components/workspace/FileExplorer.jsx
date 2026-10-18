@@ -56,32 +56,34 @@ function FileNode({ node, style, dragHandle }) {
       </span>
       <FileIcon node={node} />
       <span className="min-w-0 flex-1 truncate">{node.data.name}</span>
-      <span className="hidden items-center gap-0.5 group-hover:flex">
-        <button
-          type="button"
-          className="grid size-6 place-items-center rounded text-zinc-500 hover:bg-white/10 hover:text-white"
-          onClick={(event) => {
-            event.stopPropagation();
-            node.data.onRename(node.data);
-          }}
-          aria-label={`Rename ${node.data.name}`}
-          title="Rename"
-        >
-          <Pencil className="size-3" />
-        </button>
-        <button
-          type="button"
-          className="grid size-6 place-items-center rounded text-zinc-500 hover:bg-red-500/15 hover:text-red-300"
-          onClick={(event) => {
-            event.stopPropagation();
-            node.data.onDelete(node.data);
-          }}
-          aria-label={`Delete ${node.data.name}`}
-          title="Delete"
-        >
-          <Trash2 className="size-3" />
-        </button>
-      </span>
+      {!node.data.readOnly && (
+        <span className="hidden items-center gap-0.5 group-hover:flex">
+          <button
+            type="button"
+            className="grid size-6 place-items-center rounded text-zinc-500 hover:bg-white/10 hover:text-white"
+            onClick={(event) => {
+              event.stopPropagation();
+              node.data.onRename(node.data);
+            }}
+            aria-label={`Rename ${node.data.name}`}
+            title="Rename"
+          >
+            <Pencil className="size-3" />
+          </button>
+          <button
+            type="button"
+            className="grid size-6 place-items-center rounded text-zinc-500 hover:bg-red-500/15 hover:text-red-300"
+            onClick={(event) => {
+              event.stopPropagation();
+              node.data.onDelete(node.data);
+            }}
+            aria-label={`Delete ${node.data.name}`}
+            title="Delete"
+          >
+            <Trash2 className="size-3" />
+          </button>
+        </span>
+      )}
     </div>
   );
 }
@@ -93,7 +95,8 @@ export function FileExplorer({
   onOpen,
   onRefresh,
   onRelocate,
-  onRemove
+  onRemove,
+  readOnly = false
 }) {
   const containerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 260, height: 400 });
@@ -149,6 +152,7 @@ export function FileExplorer({
       onOpen,
       onRename: requestRename,
       onDelete: deleteNode,
+      readOnly,
       ...(node.children ? { children: decorateNodes(node.children) } : {})
     }));
   }
@@ -215,7 +219,7 @@ export function FileExplorer({
     <aside className="flex min-h-0 flex-col border-r border-white/8 bg-panel">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-white/8 px-3">
         <span className="text-[10px] font-semibold uppercase text-zinc-500">Explorer</span>
-        <div className="flex items-center gap-0.5">
+        <div className={`flex items-center gap-0.5 ${readOnly ? 'hidden' : ''}`}>
           <button
             className="grid size-7 place-items-center rounded text-zinc-500 hover:bg-white/8 hover:text-white"
             type="button"
@@ -281,6 +285,7 @@ export function FileExplorer({
           }}
           onSelect={(nodes) => setSelectedNode(nodes[0]?.data || null)}
           onMove={moveNode}
+          disableDrag={readOnly}
           aria-label="Project files"
         >
           {FileNode}

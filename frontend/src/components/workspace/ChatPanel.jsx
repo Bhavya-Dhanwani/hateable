@@ -41,7 +41,7 @@ const SUGGESTIONS = [
 
 // Chat with the aiService agent. History only lives for this session (no list-messages endpoint yet);
 // the conversationId is remembered per project so the agent keeps its context across reloads.
-export function ChatPanel({ projectId, initialPrompt, onFilesChanged }) {
+export function ChatPanel({ projectId, initialPrompt, onFilesChanged, readOnly = false }) {
   const scrollRef = useRef(null);
   const abortRef = useRef(null);
   const sentInitial = useRef(false);
@@ -282,61 +282,67 @@ export function ChatPanel({ projectId, initialPrompt, onFilesChanged }) {
         </AnimatePresence>
       </div>
 
-      <form
-        className="shrink-0 p-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(draft.trim());
-        }}
-      >
-        {error && (
-          <p
-            role="alert"
-            className="mb-2 flex items-start gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-2 text-[11px] text-red-200"
-          >
-            <AlertTriangle className="mt-px size-3 shrink-0" /> {error}
-          </p>
-        )}
-        <div className="rounded-2xl border border-white/10 bg-ink p-2 transition focus-within:border-white/20">
-          <textarea
-            className="ide-scroll max-h-40 min-h-16 w-full resize-none bg-transparent px-2 pt-1 text-[13px] leading-5 text-white outline-none placeholder:text-white/30"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                e.currentTarget.form.requestSubmit();
-              }
-            }}
-            placeholder="Ask Hateable to change something…"
-            aria-label="Message"
-          />
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[10px] text-white/30">
-              Enter to send · Shift+Enter for newline
-            </span>
-            {busy ? (
-              <button
-                type="button"
-                onClick={() => abortRef.current?.abort()}
-                className="grid size-8 place-items-center rounded-full border border-line text-white/60 hover:bg-white/5 hover:text-white"
-                aria-label="Stop generating"
-              >
-                <Square className="size-3 fill-current" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!draft.trim()}
-                className="grid size-8 place-items-center rounded-full bg-white text-black hover:bg-white/90 transition hover:scale-105 disabled:opacity-25 disabled:hover:scale-100"
-                aria-label="Send message"
-              >
-                <ArrowUp className="size-4" strokeWidth={2.5} />
-              </button>
-            )}
+      {readOnly ? (
+        <p className="m-3 shrink-0 rounded-xl border border-line px-3 py-2.5 text-[11px] text-white/45">
+          You're a viewer in this workspace. Ask an admin for editor access to chat and edit.
+        </p>
+      ) : (
+        <form
+          className="shrink-0 p-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            send(draft.trim());
+          }}
+        >
+          {error && (
+            <p
+              role="alert"
+              className="mb-2 flex items-start gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-2 text-[11px] text-red-200"
+            >
+              <AlertTriangle className="mt-px size-3 shrink-0" /> {error}
+            </p>
+          )}
+          <div className="rounded-2xl border border-white/10 bg-ink p-2 transition focus-within:border-white/20">
+            <textarea
+              className="ide-scroll max-h-40 min-h-16 w-full resize-none bg-transparent px-2 pt-1 text-[13px] leading-5 text-white outline-none placeholder:text-white/30"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  e.currentTarget.form.requestSubmit();
+                }
+              }}
+              placeholder="Ask Hateable to change something…"
+              aria-label="Message"
+            />
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] text-white/30">
+                Enter to send · Shift+Enter for newline
+              </span>
+              {busy ? (
+                <button
+                  type="button"
+                  onClick={() => abortRef.current?.abort()}
+                  className="grid size-8 place-items-center rounded-full border border-line text-white/60 hover:bg-white/5 hover:text-white"
+                  aria-label="Stop generating"
+                >
+                  <Square className="size-3 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!draft.trim()}
+                  className="grid size-8 place-items-center rounded-full bg-white text-black hover:bg-white/90 transition hover:scale-105 disabled:opacity-25 disabled:hover:scale-100"
+                  aria-label="Send message"
+                >
+                  <ArrowUp className="size-4" strokeWidth={2.5} />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
+      )}
     </aside>
   );
 }

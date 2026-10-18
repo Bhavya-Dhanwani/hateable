@@ -1,3 +1,5 @@
+import { workspacesOf } from './workspaces.util.js';
+
 async function buildTokenPayload(user: Record<string, unknown> | object) {
   const u = user as {
     _id: { toString(): string };
@@ -12,7 +14,10 @@ async function buildTokenPayload(user: Record<string, unknown> | object) {
     name: u.name,
     email: u.email,
     isVerified: u.isVerified,
-    plan: u.plan
+    plan: u.plan,
+    // projectService and aiService check shared-project access against this, so membership
+    // changes reach them on the next refresh (within one access-token lifetime)
+    workspaces: await workspacesOf(u._id.toString())
   };
   return tokenPayload;
 }
