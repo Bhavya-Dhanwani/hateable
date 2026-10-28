@@ -224,6 +224,7 @@ manifests:
     - k8s/ai-service.yml
     - k8s/playwright-mcp-deployment.yml
     - k8s/playwright-mcp-service.yml
+    - k8s/user-code-netpolicy.yml
     - k8s/ingress.yml
 
 # ── Port Forwarding ────────────────────────────────

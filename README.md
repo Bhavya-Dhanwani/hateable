@@ -432,7 +432,7 @@ Most settings have working defaults. The ones you'll actually touch:
 |                | `GITHUB_CLIENT_ID` / `_SECRET`                                 |                                  | enables GitHub connect                                        |
 |                | `TOKEN_ENCRYPTION_KEY`                                         | dev value                        | encrypts GitHub tokens and env vars; **set it in production** |
 | aiService      | `AGENT_SYSTEM_V2`                                              | `false` (`true` in k8s)          | multi-agent system vs. a single tool-calling agent            |
-|                | `MISTRAL_MODEL`                                                | `mistral-large-latest`           | model for every agent                                         |
+|                | `MISTRAL_MODEL`                                                | `codestral-latest`               | model for every agent (large needs a paid Mistral tier)       |
 |                | `MIN_SCORE` / `MAX_REVIEW_ROUNDS`                              | `9` / `4`                        | review bar and how many tries                                 |
 |                | `MAX_DEPTH` / `MAX_AGENTS`                                     | `4` / `200`                      | how deep and wide the agent tree may grow                     |
 |                | `PLAYWRIGHT_MCP_URL`                                           | (set in k8s)                     | enables browser QA; empty disables it                         |

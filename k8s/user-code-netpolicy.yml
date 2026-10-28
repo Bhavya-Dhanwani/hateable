@@ -1,0 +1,45 @@
+# Preview and deployment pods run untrusted, user- and AI-generated code. This restricts their
+# egress so a malicious or prompt-injected build cannot reach our data stores (Mongo, Redis),
+# the internal auth/project/ai services, the message broker, or the cloud metadata endpoint.
+# They keep what a normal build and site need: DNS, in-cluster object storage (file sync) and
+# the public internet (npm installs, image fetches from Unsplash/Replicate, CloudAMQP).
+# Egress rules are additive (a union of allows), so the in-cluster allows below still apply even
+# though the internet rule's `except` list excludes their private IPs.
+# NOTE: enforcement depends on the CNI. Calico/Cilium (typical in prod) enforce this; plain
+# kindnet in local dev may not — the policy is still correct and takes effect on an enforcing CNI.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: user-code-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: hateable/role
+        operator: In
+        values: ['preview', 'deployment']
+  policyTypes: ['Egress']
+  egress:
+    # DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # in-cluster object storage, for the file-sync sidecar
+    - to:
+        - podSelector:
+            matchLabels:
+              app: s3
+    # the public internet, but never private ranges (in-cluster services/DBs) or link-local
+    # (169.254.0.0/16 covers the 169.254.169.254 cloud metadata endpoint)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16

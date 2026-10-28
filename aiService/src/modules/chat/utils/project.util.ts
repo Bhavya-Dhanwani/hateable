@@ -7,16 +7,36 @@ import {
 } from '../../../shared/services/redis.service.js';
 import NotFound from '../../../shared/errors/NotFound.error.js';
 import Forbidden from '../../../shared/errors/Forbidden.error.js';
+import { callProjectService } from '../../../shared/services/projectService.service.js';
 
-// function to resolve project metadata via cache or database fallback
+// function to resolve project metadata via cache, database, then projectService. The database
+// copy arrives through the broker's project.created event, which can lag a just-created project
+// (the landing-page prompt is sent right after creation), so ask projectService as the caller.
 export async function resolveProject(
   projectId: string,
-  projectDao: ProjectDao
+  projectDao: ProjectDao,
+  authorization?: string
 ): Promise<CachedProject> {
   let project = await getCachedProject(projectId);
 
   if (!project) {
-    const dbProject = await projectDao.findProjectById(projectId);
+    let dbProject = await projectDao.findProjectById(projectId);
+
+    if (!dbProject && authorization) {
+      // projectService checks the caller may see it; a 403/404 from it surfaces as is
+      const { project: live } = await callProjectService<{
+        project: { podName?: string; serviceName?: string; userId?: string; workspaceId?: string };
+      }>(authorization, `/${projectId}`);
+      if (live?.serviceName) {
+        dbProject = await projectDao.upsertProject(projectId, {
+          projectId,
+          podName: live.podName,
+          serviceName: live.serviceName,
+          userId: live.userId,
+          workspaceId: live.workspaceId || null
+        });
+      }
+    }
 
     if (!dbProject) {
       throw new NotFound(`Project with ID ${projectId} not found.`);

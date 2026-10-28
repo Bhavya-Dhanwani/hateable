@@ -61,11 +61,22 @@ export async function ask<S extends z.ZodTypeAny>(
           .invoke([new SystemMessage(system), new HumanMessage(user)], { runName })
       );
       pool.ok(key);
-      return out;
+      // withStructuredOutput validates against `schema` at runtime; zod 4 no longer flows that
+      // type through LangChain's generic (it falls back to Record<string, any>), so assert it here
+      return out as z.infer<S>;
     } catch (err) {
       lastErr = err;
       const status = statusOf(err);
       if (status === 400 || status === 422) throw err; // our request is bad, another key won't help
+      // the model isn't on the account's plan: every key of that account gets the same 403, so
+      // say so instead of burning (and dropping) the whole pool
+      if (
+        /tier_not_allowed|not available in your subscription/i.test(String((err as Error)?.message))
+      ) {
+        throw new Error(
+          `Mistral model "${env.MISTRAL_MODEL}" isn't available on these API keys' plan. Set MISTRAL_MODEL to one they can use (e.g. codestral-latest).`
+        );
+      }
       pool.fail(key, status);
       logger.warn(
         `${runName}: attempt ${i + 1} failed (${status ?? (err as Error).message?.slice(0, 80)}), rotating key`

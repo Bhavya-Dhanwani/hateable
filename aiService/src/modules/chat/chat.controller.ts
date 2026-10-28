@@ -33,6 +33,20 @@ import {
   MessageWithMetadata
 } from '../../shared/utils/messageMapper.util.js';
 
+// whether a project's file server answers, polling for up to `withinMs` (0 = one try)
+async function workspaceReady(fileServerUrl: string, withinMs = 0) {
+  const until = Date.now() + withinMs;
+  for (;;) {
+    try {
+      await fetch(`${fileServerUrl}/file-tree`, { signal: AbortSignal.timeout(3000) });
+      return true; // any HTTP answer means the server is up
+    } catch {
+      if (Date.now() >= until) return false;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+}
+
 // class to handle chat operations
 class ChatController {
   projectDao: ProjectDao;
@@ -64,7 +78,7 @@ class ChatController {
     }
 
     // 1. Resolve project
-    const project = await resolveProject(projectId, this.projectDao);
+    const project = await resolveProject(projectId, this.projectDao, req.headers.authorization);
     // chatting changes the project's files: its owner or a workspace editor and up
     assertProjectAccess(req.user, project, 'editor');
 
@@ -153,6 +167,22 @@ class ChatController {
     });
 
     try {
+      // a brand-new project's pod may still be booting (the landing-page prompt is sent the
+      // moment the workspace opens): wait for its file server instead of failing the first run
+      if (!(await workspaceReady(fileServerUrl))) {
+        res.write(
+          `event: agent
+data: ${JSON.stringify({ path: 'Workspace', depth: 0, message: 'waiting for your workspace to start...' })}
+
+`
+        );
+        if (!(await workspaceReady(fileServerUrl, 120_000))) {
+          throw new Error(
+            'Your workspace is still starting. Give it a minute and send that again.'
+          );
+        }
+      }
+
       // 8a. Multi-agent system: boss triages, plans, hires sub-agents, reviewer loops to 9/10
       if (env.AGENT_SYSTEM_V2) {
         const abort = new AbortController();

@@ -28,7 +28,13 @@ type DeploymentAnalytics = {
   url: string;
   status: string;
   idleRemainingMs: number;
-  deployment: { slug: string; version: number; deployedAt: string; projectType: string };
+  deployment: {
+    slug: string;
+    version: number;
+    deployedAt: string;
+    projectType: string;
+    alwaysOn?: boolean;
+  };
   analytics: Record<string, unknown>;
 };
 
@@ -79,7 +85,7 @@ class InsightsController {
     // any member may ask about the live site; workspace projects run on the Team plan
     const user = (req as Request & { user?: { userId?: string; _id?: string; plan?: unknown } })
       .user;
-    const project = await resolveProject(projectId, projectDao);
+    const project = await resolveProject(projectId, projectDao, req.headers.authorization);
     assertProjectAccess(user, project, 'viewer');
 
     // plan gate: on the free plan the site AI works in the user's first project only
@@ -99,9 +105,12 @@ class InsightsController {
 
     const context = [
       `## Deployment\n${site.url}, ${site.status}, v${site.deployment.version} (${site.deployment.projectType}), deployed ${site.deployment.deployedAt}` +
-        (site.status === 'live'
-          ? `, sleeps in ${Math.round(site.idleRemainingMs / 1000)}s without visitors`
-          : ''),
+        // always-on sites report 0ms idle time left, which read to the model as "sleeping"
+        (site.deployment.alwaysOn
+          ? ', always on (never sleeps)'
+          : site.status === 'live'
+            ? `, sleeps in ${Math.round(site.idleRemainingMs / 1000)}s without visitors`
+            : ''),
       `## Analytics (last 7 days)\n${JSON.stringify(site.analytics)}`,
       `## Lifecycle events (newest first)\n${logs.events.map((e) => `${e.at} ${e.level.toUpperCase()} ${e.message}`).join('\n') || '(none)'}`,
       `## Application logs (${logs.source})\n${renderLogs(pickLogs(logs.app)) || '(none)'}`,

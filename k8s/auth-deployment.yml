@@ -54,6 +54,41 @@ spec:
                   name: auth
                   key: ADMIN_API_KEY
                   optional: true
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: auth
+                  key: GOOGLE_CLIENT_ID
+                  optional: true
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth
+                  key: GOOGLE_CLIENT_SECRET
+                  optional: true
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: auth
+                  key: SMTP_USER
+                  optional: true
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: auth
+                  key: SMTP_PASS
+                  optional: true
+            - name: SEND_MAIL
+              valueFrom:
+                secretKeyRef:
+                  name: auth
+                  key: SEND_MAIL
+                  optional: true
+            # Google login comes back through the ingress, then lands on the frontend dev server
+            - name: GOOGLE_REDIRECT_URI
+              value: http://localhost/api/auth/google/callback
+            - name: FRONTEND_URL
+              value: http://localhost:5173
             - name: TRUECALLER_APP_KEY
               valueFrom:
                 secretKeyRef:

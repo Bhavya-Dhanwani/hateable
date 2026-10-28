@@ -18,18 +18,27 @@ export function VerifyPhone() {
   const alive = useRef(true);
   const attempt = useRef(0); // bumps on cancel so a stale poll loop stops
 
-  useEffect(() => () => void (alive.current = false), []);
-
-  // fetch the link before the click so it opens as a plain link (no popup blocker)
+  // set true on (re)mount too: StrictMode mounts twice in dev, and a cleanup-only effect left
+  // alive false after the first pass, so the poll loop quietly never ran
   useEffect(() => {
-    if (request || user.phoneVerified) return;
+    alive.current = true;
+    return () => void (alive.current = false);
+  }, []);
+
+  // fetch the link before the click so it opens as a plain link (no popup blocker);
+  // the ref stops StrictMode's second effect run from requesting a second link
+  const fetching = useRef(false);
+  useEffect(() => {
+    if (request || user.phoneVerified || fetching.current) return;
+    fetching.current = true;
     authApi
       .telegramStart()
       .then(setRequest)
       .catch((e) => {
         setState('error');
         setMessage(e.message);
-      });
+      })
+      .finally(() => (fetching.current = false));
   }, [request, user.phoneVerified]);
 
   if (user.phoneVerified) return null;

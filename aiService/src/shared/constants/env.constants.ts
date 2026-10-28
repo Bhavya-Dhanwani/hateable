@@ -9,7 +9,8 @@ const envConstants = {
   REDIS_PORT: 6379,
   MISTRAL_API_KEY: '',
   MISTRAL_API_KEYS: '',
-  MISTRAL_MODEL: 'mistral-large-latest',
+  // codestral: Mistral's coding model, on the free tier too (large needs a paid tier); override per env
+  MISTRAL_MODEL: 'codestral-latest',
   PER_KEY_CONCURRENCY: 2,
   MIN_SCORE: 9,
   MAX_REVIEW_ROUNDS: 4,
