@@ -50,7 +50,10 @@ export const PROVIDERS = {
 
 export type ProviderId = keyof typeof PROVIDERS;
 
-export const isProvider = (x: unknown): x is ProviderId => typeof x === 'string' && x in PROVIDERS;
+// Object.hasOwn, not `in`: `'__proto__' in PROVIDERS` (and constructor/toString) is true via the
+// prototype chain, which would let a junk provider through the trust boundary.
+export const isProvider = (x: unknown): x is ProviderId =>
+  typeof x === 'string' && Object.hasOwn(PROVIDERS, x);
 
 const envVal = (id: ProviderId, suffix: string) => process.env[`${id.toUpperCase()}_${suffix}`];
 

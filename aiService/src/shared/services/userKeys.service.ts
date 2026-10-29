@@ -1,5 +1,6 @@
 // BYOK: a user's own provider keys. They power a personal Router once the plan allowance is spent,
 // so a free user with their own keys gets unlimited runs.
+import mongoose from 'mongoose';
 import ApiKey from '../models/apiKey.model.js';
 import { Router, type KeyEntry } from '../agents/llm.js';
 import { isProvider, PROVIDERS, type ProviderId } from '../agents/providers.js';
@@ -45,7 +46,8 @@ export async function addKey(
 }
 
 export async function removeKey(userId: string, id: string) {
-  await ApiKey.deleteOne({ _id: id, userId }); // scoped to the owner
+  // guard the cast: a non-ObjectId id (e.g. "__proto__") would otherwise throw a 500
+  if (mongoose.isValidObjectId(id)) await ApiKey.deleteOne({ _id: id, userId }); // scoped to the owner
   return listKeys(userId);
 }
 
