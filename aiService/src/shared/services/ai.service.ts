@@ -1,7 +1,7 @@
 // Importing modules
 import { BaseMessage, createAgent } from 'langchain';
 import * as z from 'zod';
-import { ask, modelFor, pool } from '../agents/llm.js';
+import { ask, currentRouter } from '../agents/llm.js';
 import { createFileTools } from './fileTools.service.js';
 import { CachedMessage } from './redis.service.js';
 import { mapCachedToLangChain } from '../utils/messageMapper.util.js';
@@ -28,8 +28,8 @@ export async function getStream({
   messages: CachedMessage[];
   fileServerUrl: string;
 }) {
-  // next key from the shared round-robin pool
-  const model = modelFor(await pool.next(), true);
+  // next key from the active router (BYOK when the plan's run out, else the shared pool)
+  const { model } = await currentRouter().pick(true);
 
   const fileTools = createFileTools(fileServerUrl);
 

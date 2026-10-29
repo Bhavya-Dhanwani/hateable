@@ -15,6 +15,8 @@ import {
 import BadRequest from '../../shared/errors/BadRequest.error.js';
 import Unauthorized from '../../shared/errors/Unauthorized.error.js';
 import { assertProjectAccess, resolveProject } from './utils/project.util.js';
+import { useRouter } from '../../shared/agents/llm.js';
+import { userRouter } from '../../shared/services/userKeys.service.js';
 import {
   AI_LIMITS,
   extrasAllowed,
@@ -86,7 +88,18 @@ class ChatController {
     // whether this project gets image generation and the browser test. Workspace projects
     // draw on the workspace's shared Team pool.
     const pool = usagePool(req.user, project);
-    await takeMessage(pool, { userId: userId.toString(), projectId });
+    try {
+      await takeMessage(pool, { userId: userId.toString(), projectId });
+    } catch (err) {
+      // plan allowance spent: run on the user's own keys if they've added any (unlimited BYOK),
+      // otherwise surface the 429 as before
+      const byok =
+        (err as { statusCode?: number })?.statusCode === 429
+          ? await userRouter(userId.toString())
+          : null;
+      if (!byok) throw err;
+      useRouter(byok); // every ask()/getStream() in this request now uses their keys
+    }
     const extras = await extrasAllowed(userId.toString(), pool.plan, projectId);
     // the pod file server mounts its routes at the root (express-file-server/src/app/app.ts)
     let fileServerUrl = `http://${project.serviceName}:8000`;

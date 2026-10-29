@@ -5,7 +5,7 @@
 import { createAgent } from 'langchain';
 import { z } from 'zod';
 import logger from '../config/logger.config.js';
-import { modelFor, pool } from './llm.js';
+import { currentRouter } from './llm.js';
 import { prompt } from './prompts.js';
 import { openBrowserSession } from '../services/mcp.service.js';
 import { createTerminalTool } from '../services/terminal.service.js';
@@ -37,7 +37,7 @@ export async function checkInBrowser(
 
   try {
     const agent = createAgent({
-      model: modelFor(await pool.next()),
+      model: (await currentRouter().pick()).model,
       // the browser, plus a shell in the project to read build errors behind what it sees
       tools: terminal
         ? [...session.tools, createTerminalTool(terminal.fileServerUrl, terminal.onRun)]

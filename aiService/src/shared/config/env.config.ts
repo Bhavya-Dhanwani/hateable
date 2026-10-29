@@ -11,6 +11,7 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default(envConstants.CORS_ORIGIN),
   BROKER_URL: z.string().default(envConstants.BROKER_URL),
   ACCESS_TOKEN_SECRET: z.string().default(envConstants.ACCESS_TOKEN_SECRET),
+  KEY_ENC_SECRET: z.string().default(envConstants.KEY_ENC_SECRET),
   REDIS_HOST: z.string().default(envConstants.REDIS_HOST),
   REDIS_PORT: z.coerce.number().default(envConstants.REDIS_PORT),
   MISTRAL_API_KEY: z.string().default(envConstants.MISTRAL_API_KEY),

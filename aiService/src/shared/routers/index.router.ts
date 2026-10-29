@@ -3,6 +3,7 @@ import healthRouter from './health.router.js';
 import chatRouter from '../../modules/chat/chat.router.js';
 import insightsRouter from '../../modules/insights/insights.router.js';
 import usageRouter from '../../modules/usage/usage.router.js';
+import keysRouter from '../../modules/keys/keys.router.js';
 
 const router = express.Router();
 
@@ -11,5 +12,6 @@ router.use('/health', healthRouter);
 router.use('/ai/chat', chatRouter);
 router.use('/ai/insights', insightsRouter);
 router.use('/ai/usage', usageRouter);
+router.use('/ai/keys', keysRouter);
 
 export default router;

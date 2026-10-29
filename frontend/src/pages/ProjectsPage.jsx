@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { ArrowUpRight, LogOut, Plus, Users } from 'lucide-react';
+import { ArrowUpRight, KeyRound, LogOut, Plus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { projectsApi } from '../api/projects.js';
@@ -12,6 +12,7 @@ import { useHeartbreak } from '../components/heartbreak-context.js';
 import SpotlightCard from '../components/bits/SpotlightCard.jsx';
 import { Logo, LogoMark } from '../components/Logo.jsx';
 import { CreateProjectDialog } from '../components/CreateProjectDialog.jsx';
+import { ApiKeysDialog } from '../components/ApiKeysDialog.jsx';
 import { projectNameFrom, takePendingPrompt } from '../utils/pendingPrompt.js';
 
 const STATUS = {
@@ -39,6 +40,7 @@ export function ProjectsPage() {
   const [pending] = useState(takePendingPrompt);
   const [isCreateOpen, setIsCreateOpen] = useState(Boolean(pending));
   const [busy, setBusy] = useState(false);
+  const [isKeysOpen, setIsKeysOpen] = useState(false);
 
   // Team workspaces: the one shown ('' = personal), the caller's workspaces and pending invites
   const [workspaceId, setWorkspaceId] = useState(selectedWorkspace.get);
@@ -164,6 +166,15 @@ export function ProjectsPage() {
             <span className="grid size-9 place-items-center rounded-full bg-white/10 text-sm font-medium text-white">
               {user.name?.[0]?.toUpperCase()}
             </span>
+            <button
+              type="button"
+              onClick={() => setIsKeysOpen(true)}
+              className="grid size-9 place-items-center rounded-full border border-line text-white/50 transition hover:bg-white/5 hover:text-white"
+              aria-label="API keys"
+              title="Your API keys"
+            >
+              <KeyRound className="size-4" />
+            </button>
             <button
               type="button"
               onClick={() => go('/login', { replace: true, onCovered: logout })}
@@ -330,6 +341,8 @@ export function ProjectsPage() {
         defaultName={pending ? projectNameFrom(pending.prompt) : ''}
         defaultType={pending?.projectType}
       />
+
+      <ApiKeysDialog open={isKeysOpen} onClose={() => setIsKeysOpen(false)} />
     </main>
   );
 }
