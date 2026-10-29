@@ -9,6 +9,7 @@ import {
   googleLoginValidators
 } from './auth.validator.js';
 import authMiddleware from '../../shared/middlewares/auth.middleware.js';
+import adminMiddleware from '../../shared/middlewares/admin.middleware.js';
 import refreshMiddleware from '../../shared/middlewares/refresh.middleware.js';
 
 // making the router
@@ -122,7 +123,7 @@ router.post('/reset-password', resetPasswordValidators, authController.resetPass
     @desc Set a user's plan: body { email, plan }, header x-admin-key: ADMIN_API_KEY
     @access Admin
 */
-router.patch('/admin/plan', authController.setPlan);
+router.patch('/admin/plan', adminMiddleware, authController.setPlan);
 
 // exporting the router
 export default router;

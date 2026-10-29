@@ -1,3 +1,4 @@
+import env from '../config/env.config.js';
 import { workspacesOf } from './workspaces.util.js';
 
 async function buildTokenPayload(user: Record<string, unknown> | object) {
@@ -16,7 +17,8 @@ async function buildTokenPayload(user: Record<string, unknown> | object) {
     name: u.name,
     email: u.email,
     isVerified: u.isVerified,
-    plan: u.plan,
+    // FREE_MODE: every service reads plan from the token, so forcing it here caps everyone to free
+    plan: env.FREE_MODE ? 'free' : u.plan,
     phone: u.phone,
     phoneVerified: u.phoneVerified,
     // projectService and aiService check shared-project access against this, so membership

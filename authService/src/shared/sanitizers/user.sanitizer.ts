@@ -1,3 +1,5 @@
+import env from '../config/env.config.js';
+
 // function to sanitize the user data
 function sanitizeUser(user: Record<string, unknown> | null | undefined) {
   // if user is null or undefined, return null
@@ -12,7 +14,7 @@ function sanitizeUser(user: Record<string, unknown> | null | undefined) {
     name: u.name,
     email: u.email,
     isVerified: u.isVerified,
-    plan: u.plan,
+    plan: env.FREE_MODE ? 'free' : u.plan,
     phone: u.phone,
     phoneVerified: u.phoneVerified
   };

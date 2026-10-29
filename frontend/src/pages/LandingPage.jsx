@@ -15,6 +15,8 @@ import {
   PinnedSteps
 } from '../components/landing/effects.jsx';
 import { savePendingPrompt } from '../utils/pendingPrompt.js';
+import { usePublicConfig } from '../api/payments.js';
+import { PaymentDialog } from '../components/PaymentDialog.jsx';
 
 // photos: free Unsplash images (ids), hotlinked from their CDN
 
@@ -259,6 +261,8 @@ const GUTTER = 'px-5 sm:px-8 lg:px-12';
 export function LandingPage() {
   const { user } = useAuth();
   const { go } = useHeartbreak();
+  const config = usePublicConfig();
+  const [payPlan, setPayPlan] = useState(null); // open the UPI dialog for this plan
 
   // Projects are always created through the name + stack dialog; the prompt rides along.
   function start({ prompt, projectType }) {
@@ -367,69 +371,87 @@ export function LandingPage() {
         />
       </section>
 
-      {/* pricing: three plans side by side, the middle one carries the weight */}
-      <section className={`pb-28 sm:pb-40 ${GUTTER}`}>
-        <SectionHead
-          index="05"
-          label="Pricing"
-          title="Pick how much you want to hate it."
-          note="Start free. Upgrade when your side project stops being one."
-        />
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          {PLANS.map((plan) => {
-            const current = user && (user.plan ?? 'free') === plan.key;
-            return (
-              <article
-                key={plan.key}
-                className={`flex flex-col rounded-[8px] border p-6 sm:p-8 ${plan.featured ? 'border-white bg-white text-black' : 'border-white/10 bg-white/[0.03]'}`}
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium tracking-[-0.02em]">{plan.name}</h3>
-                  {(current || plan.featured) && (
-                    <span
-                      className={`rounded-full px-2.5 py-1 font-mono text-[10px] tracking-wide uppercase ${plan.featured ? 'bg-black text-white' : 'bg-white/10 text-white/70'}`}
-                    >
-                      {current ? 'Your plan' : 'Most picked'}
+      {/* pricing: three plans side by side, the middle one carries the weight. Hidden in free mode. */}
+      {!config?.freeMode && (
+        <section className={`pb-28 sm:pb-40 ${GUTTER}`}>
+          <SectionHead
+            index="05"
+            label="Pricing"
+            title="Pick how much you want to hate it."
+            note="Start free. Upgrade when your side project stops being one."
+          />
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            {PLANS.map((plan) => {
+              const current = user && (user.plan ?? 'free') === plan.key;
+              return (
+                <article
+                  key={plan.key}
+                  className={`flex flex-col rounded-[8px] border p-6 sm:p-8 ${plan.featured ? 'border-white bg-white text-black' : 'border-white/10 bg-white/[0.03]'}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-medium tracking-[-0.02em]">{plan.name}</h3>
+                    {(current || plan.featured) && (
+                      <span
+                        className={`rounded-full px-2.5 py-1 font-mono text-[10px] tracking-wide uppercase ${plan.featured ? 'bg-black text-white' : 'bg-white/10 text-white/70'}`}
+                      >
+                        {current ? 'Your plan' : 'Most picked'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-10 flex items-baseline gap-2">
+                    <span className="text-[clamp(3rem,5vw,4.5rem)] leading-none font-medium tracking-[-0.05em]">
+                      {plan.price}
                     </span>
-                  )}
-                </div>
-                <div className="mt-10 flex items-baseline gap-2">
-                  <span className="text-[clamp(3rem,5vw,4.5rem)] leading-none font-medium tracking-[-0.05em]">
-                    {plan.price}
-                  </span>
-                  <span className={`text-sm ${plan.featured ? 'text-black/50' : 'text-white/40'}`}>
-                    {plan.per}
-                  </span>
-                </div>
-                <p
-                  className={`mt-4 max-w-xs text-sm leading-6 ${plan.featured ? 'text-black/60' : 'text-white/50'}`}
-                >
-                  {plan.blurb}
-                </p>
-                <ul
-                  className={`mt-8 flex-1 space-y-3 border-t pt-8 text-sm ${plan.featured ? 'border-black/10' : 'border-white/10'}`}
-                >
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-3 leading-5">
-                      <Check
-                        className={`mt-0.5 size-4 shrink-0 ${plan.featured ? 'text-black' : 'text-white/60'}`}
-                      />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <TransitionLink
-                  to={user ? '/projects' : '/signup'}
-                  className={`group mt-10 inline-flex h-12 items-center justify-between rounded-full px-6 text-sm font-medium transition ${plan.featured ? 'bg-black text-white hover:bg-black/85' : 'bg-white/10 text-white hover:bg-white/20'}`}
-                >
-                  {current ? 'Open your projects' : plan.cta}
-                  <ArrowUpRight className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                </TransitionLink>
-              </article>
-            );
-          })}
-        </div>
-      </section>
+                    <span
+                      className={`text-sm ${plan.featured ? 'text-black/50' : 'text-white/40'}`}
+                    >
+                      {plan.per}
+                    </span>
+                  </div>
+                  <p
+                    className={`mt-4 max-w-xs text-sm leading-6 ${plan.featured ? 'text-black/60' : 'text-white/50'}`}
+                  >
+                    {plan.blurb}
+                  </p>
+                  <ul
+                    className={`mt-8 flex-1 space-y-3 border-t pt-8 text-sm ${plan.featured ? 'border-black/10' : 'border-white/10'}`}
+                  >
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-start gap-3 leading-5">
+                        <Check
+                          className={`mt-0.5 size-4 shrink-0 ${plan.featured ? 'text-black' : 'text-white/60'}`}
+                        />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                  {(() => {
+                    const cls = `group mt-10 inline-flex h-12 items-center justify-between rounded-full px-6 text-sm font-medium transition ${plan.featured ? 'bg-black text-white hover:bg-black/85' : 'bg-white/10 text-white hover:bg-white/20'}`;
+                    const arrow = (
+                      <ArrowUpRight className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                    );
+                    // logged-in, upgrading to a paid plan, payments on -> open the UPI dialog
+                    if (user && !current && plan.key !== 'free' && config?.upiEnabled) {
+                      return (
+                        <button type="button" onClick={() => setPayPlan(plan.key)} className={cls}>
+                          {plan.cta}
+                          {arrow}
+                        </button>
+                      );
+                    }
+                    return (
+                      <TransitionLink to={user ? '/projects' : '/signup'} className={cls}>
+                        {current ? 'Open your projects' : plan.cta}
+                        {arrow}
+                      </TransitionLink>
+                    );
+                  })()}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* the close: the headline on the left, a fan of bounce cards on the right */}
       <section className={`overflow-x-clip pt-6 pb-28 sm:pb-40 ${GUTTER}`}>
@@ -461,6 +483,8 @@ export function LandingPage() {
         <span className="sm:text-center">Imagery from Unsplash</span>
         <span className="sm:text-right">Made with mild contempt</span>
       </footer>
+
+      <PaymentDialog open={!!payPlan} plan={payPlan || 'pro'} onClose={() => setPayPlan(null)} />
     </main>
   );
 }

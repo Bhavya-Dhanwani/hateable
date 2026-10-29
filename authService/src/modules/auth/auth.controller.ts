@@ -140,16 +140,7 @@ class AuthController {
   // admin: set a user's plan (until real checkout exists). The new plan reaches the user's
   // access token on its next refresh, within one access-token lifetime.
   setPlan = async (req: Request, res: Response) => {
-    const given = Buffer.from(String(req.headers['x-admin-key'] || ''));
-    const expected = Buffer.from(env.ADMIN_API_KEY || '');
-    if (
-      !env.ADMIN_API_KEY ||
-      given.length !== expected.length ||
-      !timingSafeEqual(given, expected)
-    ) {
-      throw new Unauthorized('Admin key is missing or wrong');
-    }
-
+    // admin key is checked by adminMiddleware on the route
     const { email, plan } = req.body as { email?: string; plan?: string };
     if (!email || !PLANS.includes(plan as Plan)) {
       throw new BadRequest(`email and plan (${PLANS.join(', ')}) are required`);

@@ -54,6 +54,26 @@ spec:
                   name: auth
                   key: ADMIN_API_KEY
                   optional: true
+            # when "true", everyone is free and the subscription/payment UI is hidden
+            - name: FREE_MODE
+              valueFrom:
+                secretKeyRef:
+                  name: auth
+                  key: FREE_MODE
+                  optional: true
+            # manual UPI payments: payee VPA + display name; UPI_ID empty => flow off
+            - name: UPI_ID
+              valueFrom:
+                secretKeyRef:
+                  name: auth
+                  key: UPI_ID
+                  optional: true
+            - name: UPI_PAYEE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: auth
+                  key: UPI_PAYEE_NAME
+                  optional: true
             - name: GOOGLE_CLIENT_ID
               valueFrom:
                 secretKeyRef:

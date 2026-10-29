@@ -31,6 +31,13 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default(envConstants.FRONTEND_URL),
   // shared key for the admin plan switch; unset means the endpoint is off
   ADMIN_API_KEY: z.string().optional(),
+  // when true: everyone is free, subscription/payment UI hidden (buildTokenPayload + sanitizeUser)
+  FREE_MODE: z
+    .preprocess((v) => (typeof v === 'string' ? v.toLowerCase() === 'true' : v), z.boolean())
+    .default(envConstants.FREE_MODE),
+  // manual UPI payments; UPI_ID empty => payment flow off
+  UPI_ID: z.string().default(envConstants.UPI_ID),
+  UPI_PAYEE_NAME: z.string().default(envConstants.UPI_PAYEE_NAME),
   // Truecaller mobile-web SDK app key (partnerKey); unset means phone verification is off
   TRUECALLER_APP_KEY: z.string().optional(),
   TRUECALLER_PARTNER_NAME: z.string().default('Hateable'),

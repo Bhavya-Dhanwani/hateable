@@ -12,6 +12,7 @@ import { LandingPage } from './pages/LandingPage.jsx';
 import { ProjectsPage } from './pages/ProjectsPage.jsx';
 import { WorkspacePage } from './pages/WorkspacePage.jsx';
 import { MembersPage } from './pages/MembersPage.jsx';
+import { AdminPage } from './pages/AdminPage.jsx';
 
 function OldAnalyticsRedirect() {
   const { projectId } = useParams();
@@ -36,6 +37,8 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      {/* admin panel: gated by the admin key entered on the page, not a user session */}
+      <Route path="/admin" element={<AdminPage />} />
       <Route element={<GuestRoute />}>
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/signup" element={<AuthPage mode="signup" />} />

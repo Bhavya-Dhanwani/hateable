@@ -6,6 +6,9 @@ import { hashPassword, comparePassword } from '../../shared/utils/hashing.util.j
 export const PLANS = ['free', 'pro', 'team'] as const;
 export type Plan = (typeof PLANS)[number];
 
+// monthly price in INR for the manual UPI checkout (free has no price); keys match PLANS
+export const PLAN_PRICES: Record<Exclude<Plan, 'free'>, number> = { pro: 999, team: 1999 };
+
 // defining the schema for the user model
 const userSchema = new mongoose.Schema({
   name: {

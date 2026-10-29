@@ -13,6 +13,8 @@ import SpotlightCard from '../components/bits/SpotlightCard.jsx';
 import { Logo, LogoMark } from '../components/Logo.jsx';
 import { CreateProjectDialog } from '../components/CreateProjectDialog.jsx';
 import { ApiKeysDialog } from '../components/ApiKeysDialog.jsx';
+import { PaymentDialog } from '../components/PaymentDialog.jsx';
+import { usePublicConfig } from '../api/payments.js';
 import { projectNameFrom, takePendingPrompt } from '../utils/pendingPrompt.js';
 
 const STATUS = {
@@ -41,6 +43,9 @@ export function ProjectsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(Boolean(pending));
   const [busy, setBusy] = useState(false);
   const [isKeysOpen, setIsKeysOpen] = useState(false);
+  const [isPayOpen, setIsPayOpen] = useState(false);
+  const config = usePublicConfig();
+  const canUpgrade = config?.upiEnabled && (user.plan ?? 'free') !== 'team';
 
   // Team workspaces: the one shown ('' = personal), the caller's workspaces and pending invites
   const [workspaceId, setWorkspaceId] = useState(selectedWorkspace.get);
@@ -166,6 +171,15 @@ export function ProjectsPage() {
             <span className="grid size-9 place-items-center rounded-full bg-white/10 text-sm font-medium text-white">
               {user.name?.[0]?.toUpperCase()}
             </span>
+            {canUpgrade && (
+              <button
+                type="button"
+                onClick={() => setIsPayOpen(true)}
+                className="hidden h-9 items-center rounded-full bg-white px-4 text-sm font-medium text-black transition hover:bg-white/90 sm:flex"
+              >
+                Upgrade
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setIsKeysOpen(true)}
@@ -343,6 +357,8 @@ export function ProjectsPage() {
       />
 
       <ApiKeysDialog open={isKeysOpen} onClose={() => setIsKeysOpen(false)} />
+
+      <PaymentDialog open={isPayOpen} plan="pro" onClose={() => setIsPayOpen(false)} />
     </main>
   );
 }
