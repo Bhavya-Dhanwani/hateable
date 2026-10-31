@@ -4,6 +4,22 @@ description: Visual design for any page or component: hierarchy, typography, spa
 
 Goal: an interface that looks deliberately designed for this product, not like a default template.
 
+## Build on the design system that ships with the project
+
+Every frontend project starts with Tailwind v4, a real font (Inter on Vite, Geist on Next.js) and
+semantic theme tokens already wired up in the global stylesheet (`src/index.css` on Vite,
+`app/globals.css` on Next.js), plus base primitives `Button`, `Card`, `Input` in the project's
+`components/ui/` folder.
+
+- Keep the `@import "tailwindcss";` and `@theme` block in the global stylesheet. Extend it (add tokens,
+  adjust the palette to suit the product) rather than replacing it or dropping Tailwind.
+- Style with the semantic token utilities — `bg-bg`, `bg-surface`, `text-fg`, `text-muted`,
+  `border-border`, `bg-accent`, `text-accent-fg`, `rounded-control`, `rounded-card`, `shadow-card`,
+  and `success`/`warning`/`danger` — not hard-coded hex values. They swap for dark mode on their own.
+- Reuse and extend the `ui/` primitives instead of re-styling raw `<button>`/`<input>` everywhere;
+  add new primitives there as the product needs them.
+- The guidance below (type scale, spacing, colour, surfaces) is how to extend this system well.
+
 ## Start from the content
 
 - Decide what the single most important thing on the screen is (a headline, a number, a primary
