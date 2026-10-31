@@ -13,17 +13,5 @@
     "lint-staged": "^15.4.3",
     "prettier": "^3.4.2",
     "secretlint": "^9.0.0"
-  },
-  "lint-staged": {
-    "*": [
-      "secretlint"
-    ],
-    "*.{js,ts,jsx,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,md,yml,yaml}": [
-      "prettier --write"
-    ]
   }
 }
